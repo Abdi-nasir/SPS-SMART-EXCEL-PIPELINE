@@ -1,0 +1,114 @@
+#  SPS Excel Pipeline - Enterprise Data Dashboard
+
+An intelligent Excel data processing pipeline that automatically handles multiple Excel files with multiple sheets, provides professional KPIs, interactive visualizations, and executive-level dashboard reporting.
+
+##  Features
+
+###  File Management
+- **Multi-File Support** - Upload and manage multiple Excel files simultaneously
+- **Multi-Sheet Support** - Each file can have multiple sheets, displayed independently
+- **Smart Processing** - Automatically detects file structures and decides whether to combine or keep separate
+- **Auto-Processing** - Pipeline runs automatically after file upload
+
+###  Dashboard & Visualization
+- **Professional KPIs** - Key Performance Indicators with trend indicators and color-coded metrics
+- **Interactive Charts** - Bar charts, line charts, pie charts, scatter plots, histograms, and box plots
+- **Time Series Analysis** - Trend lines with moving averages and CAGR calculation
+- **Comparative Analysis** - Top N categories with distribution visualization
+- **Data Quality Alerts** - Automatic detection of outliers, missing data, and anomalies
+
+###  Download & Export
+- **Full Dashboard PDF** - Download complete dashboard with KPIs and all charts in full color
+- **Charts Report** - Generate PDF reports containing only visualizations
+- **Individual Charts** - Download any chart as PNG
+
+###  Data Processing
+- **External Data Fetch** - Pull data from external APIs directly into the pipeline
+- **Data Filtering** - Filter data by categorical columns and numeric ranges
+- **Statistical Summary** - Count, mean, std, min, quartiles, and max for numeric columns
+
+###  Deployment
+- **Docker Support** - Ready-to-use Docker and Docker Compose configurations
+- **Volume Persistence** - Data persistence across container restarts
+- **Production Ready** - Nginx reverse proxy and HTTPS support
+
+##  Quick Start for New Users
+
+### Prerequisites
+- Python 3.8+ or Docker
+
+### Option 1: Run with Python (No Docker)
+
+1. **Clone the repository**
+   ```
+   git clone https://github.com/yourusername/sps-excel-pipeline.git
+   cd sps-excel-pipeline
+    ```
+2. **Run the setup script**
+    ```
+  # On Linux/Mac
+    chmod +x setup.sh
+    ./setup.sh
+
+    # On Windows
+    setup.bat
+    ```
+3. **Start the application**
+```
+ streamlit run src/app.py
+```
+
+### Option 2: Run with Docker
+
+1. **Clone and run**
+```
+git clone https://github.com/yourusername/sps-excel-pipeline.git
+cd sps-excel-pipeline
+docker-compose up -d
+```
+
+2. **Access the dashboard**
+```
+Open http://localhost:8501
+```
+
+
+### Folders Auto-Created
+
+```
+# User clones the repository
+git clone https://github.com/yourusername/sps-excel-pipeline.git
+cd sps-excel-pipeline
+
+# They see this structure (NO data/reports folders)
+sps-excel-pipeline/
+├── src/
+│   └── app.py
+├── .gitignore
+├── docker-compose.yml
+└── README.md
+
+# They run the app
+streamlit run src/app.py
+
+# App automatically creates:
+📁 Created directory: /path/to/project/data
+📁 Created directory: /path/to/project/data/raw
+📁 Created directory: /path/to/project/data/processed
+📁 Created directory: /path/to/project/reports
+
+# Now they have this structure:
+sps-excel-pipeline/
+├── data/
+│   ├── raw/
+│   └── processed/
+├── reports/
+├── src/
+│   └── app.py
+└── ...
+
+
+
+
+    
+

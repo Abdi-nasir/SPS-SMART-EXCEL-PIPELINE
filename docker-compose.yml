@@ -1,0 +1,28 @@
+
+
+services:
+  sps-dashboard:
+    build: .
+    container_name: sps-excel-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      # Persist uploaded files and processed data
+      - ./data:/app/data
+    environment:
+      - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=200
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+      - TZ=UTC
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
