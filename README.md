@@ -46,11 +46,10 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     ```
 2. **Run the setup script**
     ```
-  # On Linux/Mac
+    #On Linux/Mac
     chmod +x setup.sh
     ./setup.sh
-
-    # On Windows
+    #On Windows
     setup.bat
     ```
 3. **Start the application**
