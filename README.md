@@ -32,7 +32,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 - **Volume Persistence** - Data persistence across container restarts
 - **Production Ready** - Nginx reverse proxy and HTTPS support
 
-##  Quick Start for New Users
+##  Quick Start
 
 ### Prerequisites
 - Python 3.8+ or Docker
@@ -41,7 +41,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 
 1. **Clone the repository**
    ```
-   git clone https://github.com/yourusername/sps-excel-pipeline.git
+   git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
    cd sps-excel-pipeline
     ```
 2. **Run the setup script**
@@ -61,7 +61,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 
 1. **Clone and run**
 ```
-git clone https://github.com/yourusername/sps-excel-pipeline.git
+git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
 cd sps-excel-pipeline
 docker-compose up -d
 ```
@@ -76,7 +76,7 @@ Open http://localhost:8501
 
 ```
 # User clones the repository
-git clone https://github.com/yourusername/sps-excel-pipeline.git
+git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
 cd sps-excel-pipeline
 
 # They see this structure (NO data/reports folders)
