@@ -53,58 +53,58 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     setup.bat
     ```
 3. **Start the application**
-```
- streamlit run src/app.py
-```
+    ```
+    streamlit run src/app.py
+    ```
 
 ### Option 2: Run with Docker
 
 1. **Clone and run**
-```
-git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
-cd sps-excel-pipeline
-docker-compose up -d
-```
+    ```
+    git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
+    cd sps-excel-pipeline
+    docker-compose up -d
+    ```
 
 2. **Access the dashboard**
-```
-Open http://localhost:8501
-```
+    ```
+    Open http://localhost:8501
+    ```
 
 
 ### Folders Auto-Created
 
-```
-# User clones the repository
-git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
-cd sps-excel-pipeline
+    ```
+    # User clones the repository
+    git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
+    cd sps-excel-pipeline
 
-# They see this structure (NO data/reports folders)
-sps-excel-pipeline/
-├── src/
-│   └── app.py
-├── .gitignore
-├── docker-compose.yml
-└── README.md
+    # They see this structure (NO data/reports folders)
+    sps-excel-pipeline/
+    ├── src/
+    │   └── app.py
+    ├── .gitignore
+    ├── docker-compose.yml
+    └── README.md
 
-# They run the app
-streamlit run src/app.py
+    # They run the app
+    streamlit run src/app.py
 
-# App automatically creates:
-📁 Created directory: /path/to/project/data
-📁 Created directory: /path/to/project/data/raw
-📁 Created directory: /path/to/project/data/processed
-📁 Created directory: /path/to/project/reports
+    # App automatically creates:
+    📁 Created directory: /path/to/project/data
+    📁 Created directory: /path/to/project/data/raw
+    📁 Created directory: /path/to/project/data/processed
+    📁 Created directory: /path/to/project/reports
 
-# Now they have this structure:
-sps-excel-pipeline/
-├── data/
-│   ├── raw/
-│   └── processed/
-├── reports/
-├── src/
-│   └── app.py
-└── ...
+    # Now they have this structure:
+    sps-excel-pipeline/
+    ├── data/
+    │   ├── raw/
+    │   └── processed/
+    ├── reports/
+    ├── src/
+    │   └── app.py
+    └── ...
 
 
 
