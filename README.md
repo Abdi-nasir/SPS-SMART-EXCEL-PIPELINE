@@ -54,7 +54,8 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     ```
 3. **Start the application**
     ```
-    streamlit run src/app.py
+    streamlit run src/app.py or
+    py -m streamlit run src/app.py
     ```
 
 ### Option 2: Run with Docker
@@ -75,11 +76,11 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 ### Folders Auto-Created
 
     ```
-    # User clones the repository
+    # clone the repository
     git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
     cd sps-excel-pipeline
 
-    # They see this structure (NO data/reports folders)
+    # You see this structure (NO data/reports folders)
     sps-excel-pipeline/
     ├── src/
     │   └── app.py
@@ -87,8 +88,9 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     ├── docker-compose.yml
     └── README.md
 
-    # They run the app
-    streamlit run src/app.py
+    # run the app
+    streamlit run src/app.py or
+    py -m streamlit run src/app.py
 
     # App automatically creates:
     📁 Created directory: /path/to/project/data
@@ -96,7 +98,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     📁 Created directory: /path/to/project/data/processed
     📁 Created directory: /path/to/project/reports
 
-    # Now they have this structure:
+    # Now you have this structure:
     sps-excel-pipeline/
     ├── data/
     │   ├── raw/
