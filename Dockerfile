@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     libglib2.0-0 \
     wget \
+    chromium \
+    chromium-driver \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
