@@ -150,12 +150,12 @@ class PDFReportGenerator:
             # Chart 2: Pie Chart (if categorical column exists)
             if categorical_cols and charts_added < 2:
                 try:
-                    pie_data = df[categorical_cols[0]].value_counts().head(8)
+                    pie_data = df.groupby(categorical_cols[0])[numeric_cols[0]].sum().sort_values(ascending=False).head(8)
                     
                     fig = px.pie(
                         values=pie_data.values,
                         names=pie_data.index,
-                        title=f"Distribution of {categorical_cols[0]}",
+                        title=f"Distribution of {numeric_cols[0]} by {categorical_cols[0]}",
                         hole=0.3
                     )
                     fig.update_layout(height=400, width=700)

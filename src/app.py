@@ -18,6 +18,7 @@ import tempfile
 import os
 import base64
 from streamlit.components.v1 import html
+from complete_report import CompleteReportGenerator
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -443,7 +444,7 @@ def download_full_dashboard(df, sheet_name, file_name):
                 try:
                     date_col = date_cols[0]
                     value_col = numeric_cols[0]
-                    df_sorted = df.sort_values(date_col)
+                    df_sorted = df.sort_values(date_col, ascending=False)
                     fig = px.line(df_sorted, x=date_col, y=value_col, title="", markers=True,
                                  color_discrete_sequence=['#667eea'])
                     add_chart_to_pdf(fig, f"Trend Chart: {value_col} Over Time", pdf, "line")
@@ -454,12 +455,12 @@ def download_full_dashboard(df, sheet_name, file_name):
             if categorical_cols:
                 try:
                     pie_col = categorical_cols[0]
-                    pie_data = df[pie_col].value_counts().head(8).reset_index()
-                    pie_data.columns = [pie_col, 'count']
+                    pie_data = df.groupby(pie_col)[primary_metric].sum().reset_index().sort_values(primary_metric, ascending=False).head(20)
+                    pie_data.columns = [pie_col, primary_metric]
                     
                     fig = px.pie(
                         pie_data, 
-                        values='count', 
+                        values=primary_metric, 
                         names=pie_col, 
                         title="",
                         hole=0.3,
@@ -470,7 +471,7 @@ def download_full_dashboard(df, sheet_name, file_name):
                         textinfo='percent+label',
                         insidetextorientation='radial'
                     )
-                    add_chart_to_pdf(fig, f"Pie Chart: Distribution of {pie_col}", pdf, "pie")
+                    add_chart_to_pdf(fig, f"Pie Chart: Distribution of {primary_metric} by {pie_col}", pdf, "pie")
                 except Exception as e:
                     st.warning(f"Could not generate pie chart: {e}")
             
@@ -523,6 +524,7 @@ def download_full_dashboard(df, sheet_name, file_name):
                     if len(df_ts) > 0:
                         df_ts['period'] = df_ts[date_cols[0]].dt.to_period('M')
                         trend_data = df_ts.groupby('period')[numeric_cols[0]].sum().reset_index()
+                        trend_data = trend_data.sort_values('period', ascending=False)
                         trend_data['period_str'] = trend_data['period'].astype(str)
                         
                         fig = px.line(trend_data, x='period_str', y=numeric_cols[0], title="", markers=True)
@@ -595,68 +597,68 @@ def download_full_dashboard(df, sheet_name, file_name):
                     st.warning(f"Could not generate comparative chart: {e}")
             
             # ========== ALERTS SECTION ==========
-            pdf.add_page()
-            pdf.set_font("Arial", "B", 14)
-            pdf.cell(0, 10, "Alerts & Insights", ln=True)
-            pdf.ln(5)
+            # pdf.add_page()
+            # pdf.set_font("Arial", "B", 14)
+            # pdf.cell(0, 10, "Alerts & Insights", ln=True)
+            # pdf.ln(5)
             
-            alerts = []
-            for col in numeric_cols:
-                mean = df[col].mean()
-                std = df[col].std()
-                if std > 0:
-                    outliers = df[(df[col] > mean + 3*std) | (df[col] < mean - 3*std)]
-                    if len(outliers) > 0:
-                        alerts.append(f"- {col}: {len(outliers)} outlier(s) detected")
+            # alerts = []
+            # for col in numeric_cols:
+            #     mean = df[col].mean()
+            #     std = df[col].std()
+            #     if std > 0:
+            #         outliers = df[(df[col] > mean + 3*std) | (df[col] < mean - 3*std)]
+            #         if len(outliers) > 0:
+            #             alerts.append(f"- {col}: {len(outliers)} outlier(s) detected")
             
-            for col in df.columns:
-                missing_pct = (df[col].isnull().sum() / len(df)) * 100 if len(df) > 0 else 0
-                if missing_pct > 20:
-                    alerts.append(f"- {col}: {missing_pct:.1f}% missing data")
-                elif missing_pct > 10:
-                    alerts.append(f"- {col}: {missing_pct:.1f}% missing data")
+            # for col in df.columns:
+            #     missing_pct = (df[col].isnull().sum() / len(df)) * 100 if len(df) > 0 else 0
+            #     if missing_pct > 20:
+            #         alerts.append(f"- {col}: {missing_pct:.1f}% missing data")
+            #     elif missing_pct > 10:
+            #         alerts.append(f"- {col}: {missing_pct:.1f}% missing data")
             
-            if alerts:
-                pdf.set_font("Arial", "", 10)
-                for alert in alerts[:15]:
-                    pdf.cell(0, 7, clean_text(alert), ln=True)
-            else:
-                pdf.set_font("Arial", "I", 11)
-                pdf.set_text_color(39, 174, 96)
-                pdf.cell(0, 7, "No significant issues detected. All metrics look healthy!", ln=True)
+            # if alerts:
+            #     pdf.set_font("Arial", "", 10)
+            #     for alert in alerts[:15]:
+            #         pdf.cell(0, 7, clean_text(alert), ln=True)
+            # else:
+            #     pdf.set_font("Arial", "I", 11)
+            #     pdf.set_text_color(39, 174, 96)
+            #     pdf.cell(0, 7, "No significant issues detected. All metrics look healthy!", ln=True)
             
             # ========== STATISTICS TABLE ==========
-            if len(numeric_cols) > 0:
-                pdf.add_page()
-                pdf.set_font("Arial", "B", 14)
-                pdf.cell(0, 10, "Statistical Summary", ln=True)
-                pdf.ln(5)
+            # if len(numeric_cols) > 0:
+            #     pdf.add_page()
+            #     pdf.set_font("Arial", "B", 14)
+            #     # pdf.cell(0, 10, "Statistical Summary", ln=True)
+            #     # pdf.ln(5)
                 
-                stats_df = df[numeric_cols].describe().round(2)
+            #     # stats_df = df[numeric_cols].describe().round(2)
                 
-                num_cols_to_show = min(6, len(stats_df.columns))
-                col_width = 260 / (num_cols_to_show + 1)
+            #     # num_cols_to_show = min(6, len(stats_df.columns))
+            #     # col_width = 260 / (num_cols_to_show + 1)
                 
-                # Headers
-                pdf.set_font("Arial", "B", 8)
-                pdf.set_fill_color(102, 126, 234)
-                pdf.set_text_color(255, 255, 255)
+            #     # Headers
+            #     pdf.set_font("Arial", "B", 8)
+            #     pdf.set_fill_color(102, 126, 234)
+            #     pdf.set_text_color(255, 255, 255)
                 
-                pdf.cell(col_width, 8, "Statistic", border=1, align='C', fill=True)
-                for i in range(num_cols_to_show):
-                    pdf.cell(col_width, 8, clean_text(str(stats_df.columns[i])[:20]), border=1, align='C', fill=True)
-                pdf.ln()
+            #     pdf.cell(col_width, 8, "Statistic", border=1, align='C', fill=True)
+            #     for i in range(num_cols_to_show):
+            #         pdf.cell(col_width, 8, clean_text(str(stats_df.columns[i])[:20]), border=1, align='C', fill=True)
+            #     pdf.ln()
                 
-                # Data rows
-                pdf.set_font("Arial", "", 7)
-                pdf.set_text_color(0, 0, 0)
+            #     # Data rows
+            #     pdf.set_font("Arial", "", 7)
+            #     pdf.set_text_color(0, 0, 0)
                 
-                for stat in stats_df.index:
-                    pdf.cell(col_width, 6, clean_text(stat), border=1, align='C')
-                    for i in range(num_cols_to_show):
-                        value = f"{stats_df.loc[stat, stats_df.columns[i]]:.2f}"
-                        pdf.cell(col_width, 6, value, border=1, align='C')
-                    pdf.ln()
+            #     for stat in stats_df.index:
+            #         pdf.cell(col_width, 6, clean_text(stat), border=1, align='C')
+            #         for i in range(num_cols_to_show):
+            #             value = f"{stats_df.loc[stat, stats_df.columns[i]]:.2f}"
+            #             pdf.cell(col_width, 6, value, border=1, align='C')
+            #         pdf.ln()
             
             # ========== FOOTER ==========
             pdf.set_y(250)
@@ -873,6 +875,7 @@ def display_time_series_analysis(df, sheet_name):
     else:
         df_ts['period'] = df_ts[date_col].dt.to_period('Q')
     
+    trend_data = trend_data.sort_values('period', ascending=False)
     trend_data = df_ts.groupby('period')[metric_col].sum().reset_index()
     trend_data['period_str'] = trend_data['period'].astype(str)
     
@@ -1074,8 +1077,7 @@ def display_visualizations(df, sheet_name):
                 pass
         with col2:
             value_col = st.selectbox("Value", numeric_cols, key="line_value")
-        
-        df_sorted = df.sort_values(date_col)
+        df_sorted = df.sort_values(date_col, ascending=False)
         fig = px.line(df_sorted, x=date_col, y=value_col, title=f"{value_col} Over Time", 
                      markers=True, color_discrete_sequence=['#667eea'])
         fig.update_layout(template='plotly_white')
@@ -1100,9 +1102,10 @@ def display_charts(df, sheet_name):
     
     if chart_type == " Pie Chart" and categorical_cols:
         pie_col = st.selectbox("Category", categorical_cols, key="pie_col")
-        pie_data = df[pie_col].value_counts().head(10).reset_index()
-        pie_data.columns = [pie_col, 'count']
-        fig = px.pie(pie_data, values='count', names=pie_col, title=f"Distribution of {pie_col}",
+        value_col = st.selectbox("Value Column", numeric_cols, key="pie_value")
+        pie_data = df.groupby(pie_col)[value_col].sum().reset_index().sort_values(value_col, ascending=False).head(12)
+        pie_data.columns = [pie_col, value_col]
+        fig = px.pie(pie_data, values=value_col, names=pie_col, title=f"Distribution of {value_col} by {pie_col}",
                     color_discrete_sequence=px.colors.qualitative.Set3)
         fig.update_layout(template='plotly_white')
         st.plotly_chart(fig, use_container_width=True)
@@ -1197,7 +1200,13 @@ def display_statistics(df):
 
 def display_file_and_sheet_selector(file_structure):
     """Display file and sheet selector in sidebar"""
-    
+    st.sidebar.markdown("###  Reports")
+
+    if st.sidebar.button(" Generate Complete Consolidated Report", use_container_width=True,
+                     help="Generates a comprehensive report with common metrics and charts from ALL sheets"):
+        generate_complete_transaction_report()
+
+    st.sidebar.divider()
     st.sidebar.markdown("###  Select File")
     
     file_names = list(file_structure.keys())
@@ -1492,6 +1501,51 @@ def get_file_sheet_structure():
     
     return file_structure
 
+
+def generate_complete_transaction_report():
+    """Generate a complete report for the currently SELECTED file only"""
+    try:
+        with st.spinner(f" Generating complete report for '{st.session_state.get('selected_file', 'Unknown')}'..."):
+            file_structure = get_file_sheet_structure()
+            
+            if not file_structure:
+                st.error("No data available to generate report")
+                return
+            
+            # Get the currently selected file
+            selected_file = st.session_state.get('selected_file')
+            
+            if not selected_file or selected_file not in file_structure:
+                st.error(f"Selected file '{selected_file}' not found")
+                return
+            
+            # Get only the selected file's data
+            selected_file_info = {selected_file: file_structure[selected_file]}
+            
+            generator = CompleteReportGenerator(REPORTS_DIR)
+            report_path = generator.generate_report_for_file(selected_file, file_structure[selected_file])
+            
+            with open(report_path, "rb") as f:
+                pdf_bytes = f.read()
+            
+            total_sheets = len(file_structure[selected_file]['sheets'])
+            
+            st.success(f"✅ Report generated for '{selected_file}'! Contains {total_sheets} sheet(s)")
+            
+            st.download_button(
+                label="📥 Download Complete Report (PDF)",
+                data=pdf_bytes,
+                file_name=Path(report_path).name,
+                mime="application/pdf",
+                use_container_width=True
+            )
+            
+    except Exception as e:
+        st.error(f"Error generating report: {str(e)}")
+        st.code(traceback.format_exc())   
+        
+        
+          
 # ============================================
 # MAIN APPLICATION
 # ============================================
