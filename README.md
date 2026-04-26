@@ -49,6 +49,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     #On Linux/Mac
     chmod +x setup.sh
     ./setup.sh
+    
     #On Windows
     setup.bat
     ```
