@@ -97,6 +97,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     📁 Created directory: /path/to/project/data/raw
     📁 Created directory: /path/to/project/data/processed
     📁 Created directory: /path/to/project/reports
+    📁 Created directory: /path/to/project/logs
 
     # Now you have this structure:
     sps-excel-pipeline/
