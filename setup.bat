@@ -9,7 +9,7 @@ mkdir data\processed 2>nul
 mkdir reports 2>nul
 
 echo 📦 Installing dependencies...
-pip install -r requirements.txt
+py -m pip install -r requirements.txt
 
 echo.
 echo ✅ Setup complete!
