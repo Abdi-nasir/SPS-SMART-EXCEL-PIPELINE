@@ -24,7 +24,6 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 
 ###  Data Processing
 - **External Data Fetch** - Pull data from external APIs directly into the pipeline
-- **Data Filtering** - Filter data by categorical columns and numeric ranges
 - **Statistical Summary** - Count, mean, std, min, quartiles, and max for numeric columns
 
 ###  Deployment
@@ -49,7 +48,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     #On Linux/Mac
     chmod +x setup.sh
     ./setup.sh
-    
+
     #On Windows
     setup.bat
     ```
