@@ -49,27 +49,11 @@ An intelligent Excel data processing pipeline that automatically handles multipl
    git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
    cd sps-excel-pipeline
     ```
-2. **Run the setup script**
-    ```
-    #On Linux/Mac
-    chmod +x setup.sh
-    ./setup.sh
-
-    #On Windows
-    setup.bat
-    ```
-3. **Start the application**
-    ```
-    streamlit run src/app.py or
-    py -m streamlit run src/app.py
-    ```
 
 ### Option 2: Run with Docker
 
 1. **Clone and run**
     ```
-    git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
-    cd sps-excel-pipeline
     docker-compose up -d
     ```
 
@@ -82,21 +66,6 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 ### Folders Auto-Created
 
     ```
-    # clone the repository
-    git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
-    cd sps-excel-pipeline
-
-    # You see this structure (NO data/reports folders)
-    sps-excel-pipeline/
-    ├── src/
-    │   └── app.py
-    ├── .gitignore
-    ├── docker-compose.yml
-    └── README.md
-
-    # run the app
-    streamlit run src/app.py or
-    py -m streamlit run src/app.py
 
     # App automatically creates:
     📁 Created directory: /path/to/project/data
