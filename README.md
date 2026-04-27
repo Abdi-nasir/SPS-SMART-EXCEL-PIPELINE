@@ -4,6 +4,12 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 
 ##  Features
 
+### Authentication & Security
+- **Secure Login** - Username/password authentication for dashboard access
+- **Session Management** - Cookie-based session handling with configurable expiry
+- **Logout Functionality** - Secure logout option
+- **Configurable Users** - Easy user management via YAML configuration
+
 ###  File Management
 - **Multi-File Support** - Upload and manage multiple Excel files simultaneously
 - **Multi-Sheet Support** - Each file can have multiple sheets, displayed independently
