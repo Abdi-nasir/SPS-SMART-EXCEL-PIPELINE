@@ -1,0 +1,19 @@
+# config.yaml
+credentials:
+  usernames:
+    admin:
+      email: admin@sps.com
+      name: Administrator
+      password: $2b$12$RuaPH.RCsLVoJBsZ9dMeD.GB9Dln7yk8fUxm8xj/6xRWhQSmPfDdu
+      role: admin
+    manager:
+      email: manager@sps.com
+      name: Dashboard Manager
+      password: $2b$12$E./k/JvGYzypL9L8E1UtIelBx6R5jjOp6rb8vbaeijUpNsz0XMkq6
+      role: manager
+cookie:
+  expiry_days: 30
+  key: your_secret_key_here
+  name: sps_dashboard_cookie
+pre-authorized:
+  emails: []

@@ -1,0 +1,36 @@
+name: sps-board-dashboard
+
+services:
+  sps-dashboard:
+    image: tamhiid/sps-board-dashboard-sps-excel-dashboard:1.0.0
+    container_name: sps-excel-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      # Persist uploaded files and processed data
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./config.yaml:/app/config.yaml:ro
+      - ./logs:/app/logs
+    environment:
+      - TZ=UTC
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - sps-network
+
+
+networks:
+  sps-network:
+    driver: bridge
+
