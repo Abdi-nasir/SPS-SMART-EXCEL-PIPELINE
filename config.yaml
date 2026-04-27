@@ -1,0 +1,19 @@
+credentials:
+  usernames:
+    admin:
+      email: admin@sps.com
+      name: Admin User
+      password: $2b$12$RuaPH.RCsLVoJBsZ9dMeD.GB9Dln7yk8fUxm8xj/6xRWhQSmPfDdu
+      role: admin
+    manager1:
+      email: manager@sps.com
+      name: Dashboard Manager
+      password: $2b$12$E./k/JvGYzypL9L8E1UtIelBx6R5jjOp6rb8vbaeijUpNsz0XMkq6
+      role: manager
+cookie:
+  expiry_days: 30
+  key: SPS_DASHBOARD_SECRET_KEY
+  name: sps_dashboard_cookie
+pre-authorized:
+  emails:
+  - newuser@sps.com

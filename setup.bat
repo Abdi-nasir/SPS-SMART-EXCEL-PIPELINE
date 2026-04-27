@@ -15,7 +15,7 @@ echo.
 echo ✅ Setup complete!
 echo.
 echo To run the application:
-echo   streamlit run src/app.py
+echo   py -m streamlit run src/app.py
 echo.
 echo Or with Docker:
 echo   docker-compose up -d

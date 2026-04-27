@@ -17,6 +17,9 @@ import io
 import tempfile
 import os
 import base64
+import yaml
+from yaml.loader import SafeLoader
+import streamlit_authenticator as stauth
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -59,7 +62,9 @@ from config import (
 # Ensure directories exist
 ensure_directories()
 
-# Page configuration
+# ============================================
+# PAGE CONFIGURATION (Must be first Streamlit command)
+# ============================================
 st.set_page_config(
     page_title=PAGE_TITLE,
     page_icon=PAGE_ICON,
@@ -67,9 +72,72 @@ st.set_page_config(
     initial_sidebar_state=SIDEBAR_STATE
 )
 
+# ============================================
+# AUTHENTICATION SETUP
+# ============================================
+
+# Load configuration
+config_path = Path(__file__).parent.parent / 'config.yaml'
+with open(config_path, 'r', encoding='utf-8') as file:
+    config = yaml.load(file, Loader=SafeLoader)
+
+# Create authenticator object
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days'],
+    config.get('pre-authorized', [])
+)
+
+# Create login widget
+try:
+    name, authentication_status, username = authenticator.login(
+        location='main',
+        fields={
+            'Form name': 'SPS Dashboard Login',
+            'Username': 'Username',
+            'Password': 'Password',
+            'Login': 'Login'
+        }
+    )
+except Exception as e:
+    st.error(f"Login form error: {e}")
+    authentication_status = None
+    name = None
+    username = None
 
 # ============================================
-# HELPER FUNCTIONS USING CONFIG
+# SESSION STATE MANAGEMENT
+# ============================================
+
+# Initialize session state
+if 'authentication_status' not in st.session_state:
+    st.session_state['authentication_status'] = authentication_status
+if 'name' not in st.session_state:
+    st.session_state['name'] = name
+if 'username' not in st.session_state:
+    st.session_state['username'] = username
+
+# Update session state from login attempt
+if authentication_status is not None:
+    st.session_state['authentication_status'] = authentication_status
+    st.session_state['name'] = name
+    st.session_state['username'] = username
+
+# ============================================
+# LOGOUT HANDLER
+# ============================================
+
+def logout():
+    for key in ['authentication_status', 'name', 'username']:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
+
+
+# ============================================
+# HELPER FUNCTIONS
 # ============================================
 
 def detect_value_column(df: pd.DataFrame) -> str:
@@ -106,9 +174,9 @@ def detect_status_metrics(df: pd.DataFrame) -> tuple:
             elif any(kw in status_str for kw in FAILURE_KEYWORDS):
                 failed_count += count
             elif any(kw in status_str for kw in PENDING_KEYWORDS):
-                pass  # Skip pending
+                pass
             else:
-                success_count += count  # Default to success
+                success_count += count
     
     return success_count, failed_count
 
@@ -297,7 +365,7 @@ def download_full_dashboard(df, sheet_name, file_name):
             except Exception as e:
                 st.warning(f"Could not generate pie chart: {e}")
         
-        # Chart 3: Trend Chart (if date columns exist)
+        # Chart 3: Trend Chart
         if date_cols and numeric_cols:
             try:
                 date_col = date_cols[0]
@@ -310,7 +378,7 @@ def download_full_dashboard(df, sheet_name, file_name):
                     trend_data = df_temp.groupby('period')[value_col].sum().reset_index()
                     trend_data['period_str'] = trend_data['period'].astype(str)
                     fig = px.line(trend_data, x='period_str', y=value_col, title=f"Trend Chart: {value_col} Over Time",
-                                 markers=True, color_discrete_sequence=['#3498db'])
+                                markers=True, color_discrete_sequence=['#3498db'])
                     fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
                     if save_chart_to_pdf(fig, f"{sheet_name} - Trend Chart", pdf):
                         charts_added += 1
@@ -322,14 +390,14 @@ def download_full_dashboard(df, sheet_name, file_name):
             try:
                 hist_col = numeric_cols[0]
                 fig = px.histogram(df, x=hist_col, nbins=20, title=f"Histogram: Distribution of {hist_col}",
-                                  color_discrete_sequence=['#667eea'])
+                                color_discrete_sequence=['#667eea'])
                 fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
                 if save_chart_to_pdf(fig, f"{sheet_name} - Histogram", pdf):
                     charts_added += 1
             except Exception as e:
                 st.warning(f"Could not generate histogram: {e}")
         
-        # Chart 5: Scatter Plot (if 2+ numeric columns)
+        # Chart 5: Scatter Plot
         if len(numeric_cols) >= 2:
             try:
                 x_col = numeric_cols[0]
@@ -342,20 +410,20 @@ def download_full_dashboard(df, sheet_name, file_name):
             except Exception as e:
                 st.warning(f"Could not generate scatter plot: {e}")
         
-        # Chart 6: Box Plot (if categorical and numeric columns exist)
-        if categorical_cols and numeric_cols:
-            try:
-                box_x = categorical_cols[0]
-                box_y = numeric_cols[0]
-                top_cats = df[box_x].value_counts().head(5).index.tolist()
-                df_box = df[df[box_x].isin(top_cats)]
-                fig = px.box(df_box, x=box_x, y=box_y, title=f"Box Plot: Distribution of {box_y} by {box_x}",
-                            color=box_x)
-                fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE, showlegend=False)
-                if save_chart_to_pdf(fig, f"{sheet_name} - Box Plot", pdf):
-                    charts_added += 1
-            except Exception as e:
-                st.warning(f"Could not generate box plot: {e}")
+        # Chart 6: Box Plot
+        # if categorical_cols and numeric_cols:
+        #     try:
+        #         box_x = categorical_cols[0]
+        #         box_y = numeric_cols[0]
+        #         top_cats = df[box_x].value_counts().head(5).index.tolist()
+        #         df_box = df[df[box_x].isin(top_cats)]
+        #         fig = px.box(df_box, x=box_x, y=box_y, title=f"Box Plot: Distribution of {box_y} by {box_x}",
+        #                     color=box_x)
+        #         fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE, showlegend=False)
+        #         if save_chart_to_pdf(fig, f"{sheet_name} - Box Plot", pdf):
+        #             charts_added += 1
+        #     except Exception as e:
+        #         st.warning(f"Could not generate box plot: {e}")
         
         # Generate PDF
         pdf_bytes = pdf.output(dest='S').encode('latin-1')
@@ -466,7 +534,7 @@ def display_visualizations(df, sheet_name):
         return
     
     if categorical_cols:
-        st.subheader(" Bar Chart")
+        st.subheader("Bar Chart")
         col1, col2 = st.columns(2)
         with col1:
             x_axis = st.selectbox("X-Axis (Category)", categorical_cols, key="bar_x")
@@ -494,7 +562,7 @@ def display_visualizations(df, sheet_name):
         
         df_sorted = df.sort_values(date_col, ascending=False)
         fig = px.line(df_sorted, x=date_col, y=value_col, title=f"{value_col} Over Time", 
-                     markers=True, color_discrete_sequence=['#667eea'])
+                    markers=True, color_discrete_sequence=['#667eea'])
         fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
         st.plotly_chart(fig, use_container_width=True)
 
@@ -512,7 +580,7 @@ def display_charts(df, sheet_name):
     
     chart_type = st.selectbox(
         "Select Chart Type",
-        [" Pie Chart", " Scatter Plot", " Histogram", " Box Plot"],
+        [" Pie Chart", " Scatter Plot", " Histogram"],
         key="chart_type_select"
     )
     
@@ -550,20 +618,20 @@ def display_charts(df, sheet_name):
         hist_col = st.selectbox("Column", numeric_cols, key="hist_col")
         bins = st.slider("Number of Bins", 5, 50, 20)
         fig = px.histogram(df, x=hist_col, nbins=bins, title=f"Distribution of {hist_col}",
-                          color_discrete_sequence=['#667eea'])
+                        color_discrete_sequence=['#667eea'])
         fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
         st.plotly_chart(fig, use_container_width=True)
         
-    elif chart_type == " Box Plot" and numeric_cols and categorical_cols:
-        col1, col2 = st.columns(2)
-        with col1:
-            y_col = st.selectbox("Value", numeric_cols, key="box_y")
-        with col2:
-            x_col = st.selectbox("Group By", categorical_cols, key="box_x")
-        fig = px.box(df, x=x_col, y=y_col, title=f"Distribution of {y_col} by {x_col}",
-                    color_discrete_sequence=['#3498db'])
-        fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
-        st.plotly_chart(fig, use_container_width=True)
+    # elif chart_type == " Box Plot" and numeric_cols and categorical_cols:
+    #     col1, col2 = st.columns(2)
+    #     with col1:
+    #         y_col = st.selectbox("Value", numeric_cols, key="box_y")
+    #     with col2:
+    #         x_col = st.selectbox("Group By", categorical_cols, key="box_x")
+    #     fig = px.box(df, x=x_col, y=y_col, title=f"Distribution of {y_col} by {x_col}",
+    #                 color_discrete_sequence=['#3498db'])
+    #     fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
+    #     st.plotly_chart(fig, use_container_width=True)
     else:
         st.info(f"Need more columns for {chart_type}. Try a different chart type.")
 
@@ -827,7 +895,7 @@ def display_file_and_sheet_selector(file_structure):
     st.sidebar.markdown("###  Reports")
     
     if st.sidebar.button(" Generate Complete Transaction Report", use_container_width=True,
-                         help="Generates a comprehensive report with all transaction metrics from ALL sheets"):
+                        help="Generates a comprehensive report with all transaction metrics from ALL sheets"):
         generate_complete_transaction_report()
     
     st.sidebar.divider()
@@ -1170,12 +1238,34 @@ def generate_complete_transaction_report():
 
 
 # ============================================
-# MAIN APPLICATION
+# MAIN APPLICATION (Protected by Authentication)
 # ============================================
 
-def main():
-    """Main application"""
+# Show login form if not authenticated
+if st.session_state['authentication_status'] is None or st.session_state['authentication_status'] is False:
+    # Already showing login form from authenticator.login()
+    if st.session_state['authentication_status'] is False:
+        st.error(' Username or password is incorrect')
+    elif st.session_state['authentication_status'] is None:
+        st.info(' Please enter your username and password to continue')
     
+    # Stop execution here - don't show dashboard
+    st.stop()
+
+# If authenticated, show dashboard
+if st.session_state['authentication_status']:
+    
+    # Add logout button to sidebar
+    with st.sidebar:
+        if st.button(" Logout", use_container_width=True):
+            logout()
+        st.divider()
+        
+        # Display user info
+        st.success(f" Logged in as: {st.session_state.get('name', 'User')}")
+        st.caption(f"Username: {st.session_state.get('username', '')}")
+    
+    # ========== MAIN DASHBOARD CONTENT ==========
     st.title(PAGE_TITLE)
     st.markdown("*Enterprise-grade data visualization and analytics platform*")
     
@@ -1188,7 +1278,7 @@ def main():
         except:
             st.image(FALLBACK_LOGO_URL, width=100)
         
-        st.markdown(PAGE_TITLE )
+        st.markdown(PAGE_TITLE)
         st.markdown("*Executive Analytics Platform*")
         st.divider()
         
@@ -1210,33 +1300,28 @@ def main():
             upload_excel_files()
         with tab2:
             fetch_external_data()
-        return
-    
-    with st.sidebar:
-        selected_file, selected_sheet, file_info = display_file_and_sheet_selector(file_structure)
-        st.divider()
+    else:
+        with st.sidebar:
+            selected_file, selected_sheet, file_info = display_file_and_sheet_selector(file_structure)
+            st.divider()
+            
+            if st.button(" Refresh Data", use_container_width=True):
+                run_pipeline()
+                time.sleep(2)
+                st.rerun()
+            
+            st.divider()
+            
+            page = st.radio("Navigation", [" Dashboard", " Upload Files", " External Data"], index=0)
         
-        if st.button(" Refresh Data", use_container_width=True):
-            run_pipeline()
-            time.sleep(2)
-            st.rerun()
-        
-        st.divider()
-        
-        page = st.radio("Navigation", [" Dashboard", " Upload Files", " External Data"], index=0)
-    
-    if page == " Dashboard":
-        if selected_file and selected_sheet:
-            try:
-                display_sheet_data_enhanced(file_info, selected_sheet)
-            except Exception as e:
-                st.error(f"Error displaying sheet data: {str(e)}")
-                st.code(traceback.format_exc())
-    elif page == " Upload Files":
-        upload_excel_files()
-    elif page == " External Data":
-        fetch_external_data()
-
-
-if __name__ == "__main__":
-    main()
+        if page == " Dashboard":
+            if selected_file and selected_sheet:
+                try:
+                    display_sheet_data_enhanced(file_info, selected_sheet)
+                except Exception as e:
+                    st.error(f"Error displaying sheet data: {str(e)}")
+                    st.code(traceback.format_exc())
+        elif page == " Upload Files":
+            upload_excel_files()
+        elif page == " External Data":
+            fetch_external_data()
