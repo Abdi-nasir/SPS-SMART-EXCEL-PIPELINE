@@ -13,6 +13,7 @@ import requests
 import json
 from datetime import datetime
 import traceback
+import logging
 import io
 import tempfile
 import os
@@ -73,6 +74,34 @@ st.set_page_config(
 )
 
 # ============================================
+# LOGGING CONFIGURATION
+# ============================================
+
+def setup_logging():
+    """Set up logging to both console and file"""
+    
+    # Create logs directory if it doesn't exist
+    logs_dir = Path(__file__).parent.parent / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(logs_dir / "app.log"),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    
+    return logging.getLogger(__name__)
+
+# Initialize logger
+logger = setup_logging()
+logger.info("Application starting...")
+
+
+# ============================================
 # AUTHENTICATION SETUP
 # ============================================
 
@@ -95,7 +124,7 @@ try:
     name, authentication_status, username = authenticator.login(
         location='main',
         fields={
-            'Form name': 'SPS Dashboard Login',
+            'Form name': 'Login',
             'Username': 'Username',
             'Password': 'Password',
             'Login': 'Login'
@@ -125,15 +154,6 @@ if authentication_status is not None:
     st.session_state['name'] = name
     st.session_state['username'] = username
 
-# ============================================
-# LOGOUT HANDLER
-# ============================================
-
-def logout():
-    for key in ['authentication_status', 'name', 'username']:
-        if key in st.session_state:
-            del st.session_state[key]
-    st.rerun()
 
 
 # ============================================
@@ -1257,9 +1277,7 @@ if st.session_state['authentication_status']:
     
     # Add logout button to sidebar
     with st.sidebar:
-        if st.button(" Logout", use_container_width=True):
-            logout()
-        st.divider()
+        authenticator.logout(' Logout', 'sidebar')
         
         # Display user info
         st.success(f" Logged in as: {st.session_state.get('name', 'User')}")

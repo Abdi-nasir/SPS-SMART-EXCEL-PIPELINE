@@ -14,6 +14,3 @@ cookie:
   expiry_days: 30
   key: SPS_DASHBOARD_SECRET_KEY
   name: sps_dashboard_cookie
-pre-authorized:
-  emails:
-  - newuser@sps.com

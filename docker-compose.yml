@@ -7,11 +7,11 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      # Persist uploaded files and processed data
-      - ./data:/app/data
+      # Persist  files and processed data
+       - ./data:/app/data
+       - ./reports:/app/reports
+       - ./logs:/app/logs
     environment:
-      - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=200
-      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
       - TZ=UTC
     restart: unless-stopped
     healthcheck:
@@ -25,4 +25,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+        compress: "true"
+    networks:
+      - sps-network
+
+
+networks:
+  sps-network:
+    driver: bridge
 

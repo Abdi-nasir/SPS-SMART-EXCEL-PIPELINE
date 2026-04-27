@@ -4,7 +4,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install minimal system dependencies (only what's absolutely necessary)
+# Install minimal system dependencies (including font support)
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -14,7 +14,20 @@ RUN apt-get update && apt-get install -y \
     chromium \
     chromium-driver \
     curl \
+    fontconfig \
+    fonts-liberation \
+    fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
+
+# Create fonts directory in system font location
+RUN mkdir -p /usr/share/fonts/custom
+
+# Copy custom fonts from your project's fonts directory
+# The trailing slash on destination indicates it's a directory
+COPY fonts/ /usr/share/fonts/custom/
+
+# Update font cache so system recognizes the new fonts
+RUN fc-cache -fv
 
 # Copy requirements first (for better caching)
 COPY requirements.txt .
@@ -28,8 +41,8 @@ RUN pip install --no-cache-dir kaleido
 # Copy the rest of the application
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p /app/data/raw /app/data/processed /app/reports
+# Create necessary directories for data persistence
+RUN mkdir -p /app/data/raw /app/data/processed /app/reports /app/logs
 
 # Expose Streamlit port
 EXPOSE 8501
