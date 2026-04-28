@@ -40,9 +40,9 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 ##  Quick Start
 
 ### Prerequisites
-- Python 3.8+ or Docker
+- Docker
 
-### Option 1: Run with Python (No Docker)
+
 
 1. **Clone the repository**
    ```
@@ -50,7 +50,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
    cd sps-excel-pipeline
     ```
 
-### Option 2: Run with Docker
+###  Run with Docker
 
 1. **Clone and run**
     ```
