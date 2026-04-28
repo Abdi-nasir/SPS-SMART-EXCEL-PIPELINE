@@ -92,7 +92,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     run py src/has_passwwords.py
 
     paste them into config.yaml file
-
+    ```
 
 ### Folders Auto-Created
 
