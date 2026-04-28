@@ -70,12 +70,21 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     ```
     git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
     cd sps-excel-pipeline
-    docker-compose up -d
+    docker-compose up -d 
     ```
 
 2. **Access the dashboard**
     ```
     Open http://localhost:8501
+    ```
+
+3. **Hash your own password**
+
+    ```
+    modify src/hash_passwords.py 
+    run py src/has_passwwords.py
+
+    paste them into config.yaml file
     ```
 
 
@@ -111,6 +120,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     │   ├── raw/
     │   └── processed/
     ├── reports/
+    ├── logs/
     ├── src/
     │   └── app.py
     └── ...
