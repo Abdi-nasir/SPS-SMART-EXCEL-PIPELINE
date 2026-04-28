@@ -2,6 +2,7 @@
 Configuration file for SPS Excel Pipeline
 Centralize all common variables and settings
 """
+import base64
 from pathlib import Path
 import os
 
@@ -11,6 +12,30 @@ import os
 
 # Project root directory (now go up one level since config is in src/)
 BASE_DIR = Path(__file__).parent.parent
+
+def get_page_icon():
+    """Get page icon from logo file or fallback to emoji"""
+    
+    # Try multiple possible logo locations
+    possible_paths = [
+        Path(__file__).parent.parent / "images" / "sps_logo.png",
+        Path(__file__).parent.parent / "images" / "logo.png",
+        Path(__file__).parent.parent / "logo.png",
+        Path(__file__).parent / "images" / "sps_logo.png",
+    ]
+    
+    for logo_path in possible_paths:
+        if logo_path.exists():
+            try:
+                with open(logo_path, "rb") as f:
+                    logo_bytes = f.read()
+                    logo_base64 = base64.b64encode(logo_bytes).decode()
+                    return f"data:image/png;base64,{logo_base64}"
+            except Exception:
+                continue
+    
+    # Fallback to emoji if no logo found
+    return ""
 
 # Data directories
 DATA_DIR = BASE_DIR / "data"
@@ -49,7 +74,7 @@ HIGH_LEVEL_METRICS_PATTERNS = [
 
 # Streamlit page configuration
 PAGE_TITLE = "SPS Board Dashboard"
-PAGE_ICON = "/images/sps_logo.png"
+PAGE_ICON = get_page_icon()
 PAGE_LAYOUT = "wide"
 SIDEBAR_STATE = "expanded"
 
