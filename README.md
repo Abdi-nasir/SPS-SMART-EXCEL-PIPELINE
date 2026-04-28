@@ -81,8 +81,10 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     │   └── processed/
     ├── reports/
     ├── logs/
-    ├── src/
-    │   └── app.py
+    ├── docker-compose.yml
+    ├── config.yaml
+    ├── nginx.conf
+    │   
     └── ...
 
 
