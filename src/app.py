@@ -230,50 +230,79 @@ def get_kpi_color(kpi_name: str) -> tuple:
 # FULL DASHBOARD DOWNLOAD FUNCTION
 # ============================================
 
-def download_full_dashboard(df, sheet_name, file_name):
-    """Download the complete dashboard page with charts"""
+def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_selections=None):
+    """
+    Download the complete dashboard page with ALL current charts
+    Captures: Bar Chart, Trend Chart, Pie Chart, Scatter Plot, Histogram, 
+              Time Series Analysis, Comparative Analysis, Target vs Actual Gauge
+    """
     
     try:
         from fpdf import FPDF
         import tempfile
         import uuid
         
-        st.info(" Preparing dashboard for download...")
+        # Use provided filtered_df or original
+        display_df = filtered_df if filtered_df is not None else df
         
-        # Create PDF object using config
+        # Get chart selections from session state if not provided
+        if chart_selections is None:
+            chart_selections = st.session_state.get('dashboard_chart_selections', {})
+        
+        st.info(f" Preparing dashboard download with {len(display_df)} records...")
+        
+        # Create PDF object
         pdf = FPDF(orientation=PDF_ORIENTATION, unit=PDF_UNIT, format=PDF_FORMAT)
         pdf.set_auto_page_break(auto=True, margin=PDF_MARGIN)
         
         temp_files = []
         
         def clean_text(text):
-            """Remove or replace Unicode characters that cause issues"""
             replacements = {
                 '\u2022': '-', '\u25CF': '-', '\u25CB': 'o', '\u2013': '-',
                 '\u2014': '--', '\u2018': "'", '\u2019': "'", '\u201C': '"',
-                '\u201D': '"', '\u00A0': ' ', '\u20B9': 'Rs.', '\u20AC': 'EUR',
-                '\u00A3': 'GBP', '\u00A5': 'Yen', '\u2713': '✓', '\u2714': '✔', '\u274C': '✘'
+                '\u201D': '"', '\u00A0': ' '
             }
             for old, new in replacements.items():
                 text = text.replace(old, new)
             return text.encode('ascii', errors='ignore').decode('ascii')
         
-        def save_chart_to_pdf(fig, title, pdf_obj):
-            """Save a chart to a new page in the PDF"""
+        def save_chart_to_pdf(fig, title, pdf_obj, chart_type="standard"):
             temp_path = os.path.join(tempfile.gettempdir(), f"chart_{uuid.uuid4().hex}.png")
             try:
-                fig.write_image(temp_path, scale=1.5, width=700, height=350)
-                pdf_obj.add_page()
-                pdf_obj.set_font("Arial", "B", 14)
-                pdf_obj.set_fill_color(HEADER_COLOR[0], HEADER_COLOR[1], HEADER_COLOR[2])
-                pdf_obj.set_text_color(255, 255, 255)
-                pdf_obj.cell(0, 10, clean_text(title), ln=True, fill=True)
-                pdf_obj.set_text_color(0, 0, 0)
-                pdf_obj.ln(8)
-                pdf_obj.image(temp_path, x=15, y=35, w=270)
+                if chart_type == "pie":
+                    fig.write_image(temp_path, scale=1.5, width=600, height=400)
+                    pdf_obj.add_page()
+                    pdf_obj.set_font("Arial", "B", 14)
+                    pdf_obj.set_fill_color(HEADER_COLOR[0], HEADER_COLOR[1], HEADER_COLOR[2])
+                    pdf_obj.set_text_color(255, 255, 255)
+                    pdf_obj.cell(0, 10, clean_text(title), ln=True, fill=True)
+                    pdf_obj.set_text_color(0, 0, 0)
+                    pdf_obj.ln(8)
+                    pdf_obj.image(temp_path, x=55, y=35, w=190)
+                elif chart_type == "gauge":
+                    fig.write_image(temp_path, scale=1.5, width=500, height=350)
+                    pdf_obj.add_page()
+                    pdf_obj.set_font("Arial", "B", 14)
+                    pdf_obj.set_fill_color(HEADER_COLOR[0], HEADER_COLOR[1], HEADER_COLOR[2])
+                    pdf_obj.set_text_color(255, 255, 255)
+                    pdf_obj.cell(0, 10, clean_text(title), ln=True, fill=True)
+                    pdf_obj.set_text_color(0, 0, 0)
+                    pdf_obj.ln(8)
+                    pdf_obj.image(temp_path, x=75, y=35, w=150)
+                else:
+                    fig.write_image(temp_path, scale=1.5, width=700, height=400)
+                    pdf_obj.add_page()
+                    pdf_obj.set_font("Arial", "B", 14)
+                    pdf_obj.set_fill_color(HEADER_COLOR[0], HEADER_COLOR[1], HEADER_COLOR[2])
+                    pdf_obj.set_text_color(255, 255, 255)
+                    pdf_obj.cell(0, 10, clean_text(title), ln=True, fill=True)
+                    pdf_obj.set_text_color(0, 0, 0)
+                    pdf_obj.ln(8)
+                    pdf_obj.image(temp_path, x=15, y=35, w=270)
                 return True
             except Exception as e:
-                st.warning(f"Could not generate chart: {title} - {str(e)}")
+                st.warning(f"Could not generate chart: {title}")
                 return False
             finally:
                 if os.path.exists(temp_path):
@@ -295,6 +324,12 @@ def download_full_dashboard(df, sheet_name, file_name):
         pdf.cell(0, 6, f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align="C")
         pdf.cell(0, 6, f"Source File: {clean_text(file_name)}", ln=True, align="C")
         
+        # Show filter info
+        if filtered_df is not None and len(filtered_df) != len(df):
+            pdf.set_font("Arial", "I", 9)
+            pdf.set_text_color(100, 100, 100)
+            pdf.cell(0, 5, f" Filtered data: {len(display_df):,} of {len(df):,} records", ln=True, align="C")
+        
         # ========== KPI SECTION ==========
         pdf.ln(8)
         pdf.set_font("Arial", "B", 14)
@@ -302,27 +337,27 @@ def download_full_dashboard(df, sheet_name, file_name):
         pdf.cell(0, 10, "Key Performance Indicators", ln=True)
         pdf.ln(5)
         
-        numeric_cols = df.select_dtypes(include=['number']).columns
+        numeric_cols = display_df.select_dtypes(include=['number']).columns
         
         if len(numeric_cols) > 0:
-            primary_metric = detect_value_column(df) or numeric_cols[0]
-            total_value = df[primary_metric].sum()
-            avg_value = df[primary_metric].mean()
-            max_value = df[primary_metric].max()
-            min_value = df[primary_metric].min()
-            completeness = (1 - df.isnull().sum().sum() / (df.shape[0] * df.shape[1])) * 100 if df.shape[0] > 0 else 0
+            primary_metric = detect_value_column(display_df) or numeric_cols[0]
+            total_value = display_df[primary_metric].sum()
+            avg_value = display_df[primary_metric].mean()
+            max_value = display_df[primary_metric].max()
+            min_value = display_df[primary_metric].min()
+            completeness = (1 - display_df.isnull().sum().sum() / (display_df.shape[0] * display_df.shape[1])) * 100 if display_df.shape[0] > 0 else 0
             
             kpis = [
-                {'label': f'Total {primary_metric}', 'value': f'{total_value:,.0f}', 'color': KPI_COLORS['value']},
-                {'label': f'Average {primary_metric}', 'value': f'{avg_value:,.0f}', 'color': KPI_COLORS['default']},
-                {'label': f'Maximum {primary_metric}', 'value': f'{max_value:,.0f}', 'color': KPI_COLORS['volume']},
-                {'label': f'Minimum {primary_metric}', 'value': f'{min_value:,.0f}', 'color': KPI_COLORS['failed']},
-                {'label': 'Total Records', 'value': f'{len(df):,}', 'color': KPI_COLORS['rate']},
-                {'label': 'Data Quality', 'value': f'{completeness:.1f}%', 'color': KPI_COLORS['default']}
+                {'label': f'Total {primary_metric}', 'value': f'{total_value:,.0f}'},
+                {'label': f'Average {primary_metric}', 'value': f'{avg_value:,.0f}'},
+                {'label': f'Maximum {primary_metric}', 'value': f'{max_value:,.0f}'},
+                {'label': f'Minimum {primary_metric}', 'value': f'{min_value:,.0f}'},
+                {'label': 'Total Records', 'value': f'{len(display_df):,}'},
+                {'label': 'Data Quality', 'value': f'{completeness:.1f}%'}
             ]
             
             card_width = 85
-            card_height = 45
+            card_height = 40
             start_x = 15
             start_y = pdf.get_y()
             
@@ -334,124 +369,211 @@ def download_full_dashboard(df, sheet_name, file_name):
                 
                 pdf.set_fill_color(248, 249, 250)
                 pdf.rect(x, y, card_width, card_height, 'F')
-                pdf.set_draw_color(kpi['color'][0], kpi['color'][1], kpi['color'][2])
+                pdf.set_draw_color(52, 152, 219)
                 pdf.rect(x, y, card_width, card_height, 'D')
-                
                 pdf.set_xy(x + 5, y + 5)
                 pdf.set_font("Arial", "B", 9)
                 pdf.set_text_color(100, 100, 100)
                 pdf.cell(card_width - 10, 6, clean_text(kpi['label']), ln=True, align='C')
-                
                 pdf.set_xy(x + 5, y + 15)
-                pdf.set_font("Arial", "B", 16)
-                pdf.set_text_color(kpi['color'][0], kpi['color'][1], kpi['color'][2])
+                pdf.set_font("Arial", "B", 14)
+                pdf.set_text_color(52, 152, 219)
                 pdf.cell(card_width - 10, 10, clean_text(kpi['value']), ln=True, align='C')
             
             pdf.set_y(start_y + 2 * (card_height + 8) + 10)
         
-        # ========== GENERATE CHARTS ==========
-        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-        categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+        # Get data for charts
+        categorical_cols = display_df.select_dtypes(include=['object']).columns.tolist()
         categorical_cols = [c for c in categorical_cols if not c.startswith('_')]
-        date_cols = [c for c in df.columns if any(kw in c.lower() for kw in DATE_COLUMN_KEYWORDS)]
+        numeric_cols = display_df.select_dtypes(include=['number']).columns.tolist()
+        date_cols = [c for c in display_df.columns if any(kw in c.lower() for kw in DATE_COLUMN_KEYWORDS)]
         
-        charts_added = 0
-        
-        # Chart 1: Bar Chart
+        # ========== CHART 1: BAR CHART ==========
         if categorical_cols and numeric_cols:
             try:
-                x_axis = categorical_cols[0]
-                y_axis = numeric_cols[0]
-                agg_data = df.groupby(x_axis)[y_axis].sum().reset_index().sort_values(y_axis, ascending=False).head(10)
+                x_axis = chart_selections.get('bar_x', categorical_cols[0])
+                y_axis = chart_selections.get('bar_y', numeric_cols[0])
+                
+                agg_data = display_df.groupby(x_axis)[y_axis].sum().reset_index().sort_values(y_axis, ascending=False).head(10)
                 fig = px.bar(agg_data, x=x_axis, y=y_axis, title=f"Bar Chart: {y_axis} by {x_axis}",
                             color=y_axis, color_continuous_scale='Viridis')
-                fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
-                if save_chart_to_pdf(fig, f"{sheet_name} - Bar Chart", pdf):
-                    charts_added += 1
+                fig.update_layout(height=400, width=700, template=CHART_TEMPLATE)
+                save_chart_to_pdf(fig, f"Bar Chart: {y_axis} by {x_axis}", pdf)
             except Exception as e:
-                st.warning(f"Could not generate bar chart: {e}")
+                pass
         
-        # Chart 2: Pie Chart
-        if categorical_cols and numeric_cols:
-            try:
-                pie_col = categorical_cols[0]
-                value_col = numeric_cols[0]
-                pie_data = df.groupby(pie_col)[value_col].sum().reset_index().sort_values(value_col, ascending=False).head(10)
-                fig = px.pie(pie_data, values=value_col, names=pie_col, title=f"Pie Chart: Distribution of {value_col}",
-                            hole=0.3, color_discrete_sequence=px.colors.qualitative.Set3)
-                fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
-                if save_chart_to_pdf(fig, f"{sheet_name} - Pie Chart", pdf):
-                    charts_added += 1
-            except Exception as e:
-                st.warning(f"Could not generate pie chart: {e}")
-        
-        # Chart 3: Trend Chart
+        # ========== CHART 2: TREND CHART ==========
         if date_cols and numeric_cols:
             try:
                 date_col = date_cols[0]
                 value_col = numeric_cols[0]
-                df_temp = df.copy()
+                
+                df_temp = display_df.copy()
                 df_temp[date_col] = pd.to_datetime(df_temp[date_col], errors='coerce')
                 df_temp = df_temp.dropna(subset=[date_col])
                 if len(df_temp) > 0:
-                    df_temp['period'] = df_temp[date_col].dt.to_period('M')
-                    trend_data = df_temp.groupby('period')[value_col].sum().reset_index()
-                    trend_data['period_str'] = trend_data['period'].astype(str)
-                    fig = px.line(trend_data, x='period_str', y=value_col, title=f"Trend Chart: {value_col} Over Time",
-                                markers=True, color_discrete_sequence=['#3498db'])
-                    fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
-                    if save_chart_to_pdf(fig, f"{sheet_name} - Trend Chart", pdf):
-                        charts_added += 1
+                    fig = px.line(df_temp.sort_values(date_col), x=date_col, y=value_col, 
+                                title=f"Trend Chart: {value_col} Over Time",
+                                markers=True, color_discrete_sequence=['#667eea'])
+                    fig.update_layout(height=400, width=700, template=CHART_TEMPLATE)
+                    save_chart_to_pdf(fig, f"Trend Chart: {value_col} Over Time", pdf)
             except Exception as e:
-                st.warning(f"Could not generate trend chart: {e}")
+                pass
         
-        # Chart 4: Histogram
-        if numeric_cols:
+        # ========== CHART 3: PIE CHART ==========
+        if categorical_cols and numeric_cols:
             try:
-                hist_col = numeric_cols[0]
-                fig = px.histogram(df, x=hist_col, nbins=20, title=f"Histogram: Distribution of {hist_col}",
-                                color_discrete_sequence=['#667eea'])
-                fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
-                if save_chart_to_pdf(fig, f"{sheet_name} - Histogram", pdf):
-                    charts_added += 1
+                pie_col = chart_selections.get('pie_col', categorical_cols[0])
+                value_col = chart_selections.get('pie_value', numeric_cols[0])
+                
+                pie_data = display_df.groupby(pie_col)[value_col].sum().reset_index().sort_values(value_col, ascending=False).head(10)
+                fig = px.pie(pie_data, values=value_col, names=pie_col, title=f"Pie Chart: Distribution of {value_col}",
+                            hole=0.3, color_discrete_sequence=px.colors.qualitative.Set3)
+                fig.update_layout(height=400, width=600, template=CHART_TEMPLATE)
+                save_chart_to_pdf(fig, f"Pie Chart: Distribution of {value_col}", pdf, "pie")
             except Exception as e:
-                st.warning(f"Could not generate histogram: {e}")
+                pass
         
-        # Chart 5: Scatter Plot
+        # ========== CHART 4: SCATTER PLOT ==========
         if len(numeric_cols) >= 2:
             try:
-                x_col = numeric_cols[0]
-                y_col = numeric_cols[1]
-                fig = px.scatter(df, x=x_col, y=y_col, title=f"Scatter Plot: {y_col} vs {x_col}",
+                x_col = chart_selections.get('scatter_x', numeric_cols[0])
+                y_col = chart_selections.get('scatter_y', numeric_cols[1])
+                
+                fig = px.scatter(display_df, x=x_col, y=y_col, title=f"Scatter Plot: {y_col} vs {x_col}",
                                 color_discrete_sequence=['#667eea'])
-                fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
-                if save_chart_to_pdf(fig, f"{sheet_name} - Scatter Plot", pdf):
-                    charts_added += 1
+                fig.update_layout(height=400, width=700, template=CHART_TEMPLATE)
+                save_chart_to_pdf(fig, f"Scatter Plot: {y_col} vs {x_col}", pdf)
             except Exception as e:
-                st.warning(f"Could not generate scatter plot: {e}")
+                pass
         
-        # Chart 6: Box Plot
-        # if categorical_cols and numeric_cols:
-        #     try:
-        #         box_x = categorical_cols[0]
-        #         box_y = numeric_cols[0]
-        #         top_cats = df[box_x].value_counts().head(5).index.tolist()
-        #         df_box = df[df[box_x].isin(top_cats)]
-        #         fig = px.box(df_box, x=box_x, y=box_y, title=f"Box Plot: Distribution of {box_y} by {box_x}",
-        #                     color=box_x)
-        #         fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE, showlegend=False)
-        #         if save_chart_to_pdf(fig, f"{sheet_name} - Box Plot", pdf):
-        #             charts_added += 1
-        #     except Exception as e:
-        #         st.warning(f"Could not generate box plot: {e}")
+        # ========== CHART 5: HISTOGRAM ==========
+        if numeric_cols:
+            try:
+                hist_col = chart_selections.get('hist_col', numeric_cols[0])
+                bins = chart_selections.get('hist_bins', 20)
+                
+                fig = px.histogram(display_df, x=hist_col, nbins=bins, title=f"Histogram: Distribution of {hist_col}",
+                                  color_discrete_sequence=['#667eea'])
+                fig.update_layout(height=400, width=700, template=CHART_TEMPLATE)
+                save_chart_to_pdf(fig, f"Histogram: Distribution of {hist_col}", pdf)
+            except Exception as e:
+                pass
+        
+        # ========== CHART 6: TIME SERIES ANALYSIS ==========
+        if date_cols and numeric_cols:
+            try:
+                df_ts = display_df.copy()
+                df_ts[date_cols[0]] = pd.to_datetime(df_ts[date_cols[0]], errors='coerce')
+                df_ts = df_ts.dropna(subset=[date_cols[0]])
+                if len(df_ts) > 3:
+                    df_ts['period'] = df_ts[date_cols[0]].dt.to_period('M')
+                    trend_data = df_ts.groupby('period')[numeric_cols[0]].sum().reset_index()
+                    trend_data = trend_data.sort_values('period')
+                    trend_data['period_str'] = trend_data['period'].astype(str)
+                    
+                    fig = px.line(trend_data, x='period_str', y=numeric_cols[0], 
+                                title=f"Time Series: {numeric_cols[0]} Over Time", markers=True,
+                                color_discrete_sequence=['#3498db'])
+                    
+                    window = min(3, len(trend_data))
+                    fig.add_trace(
+                        go.Scatter(
+                            x=trend_data['period_str'],
+                            y=trend_data[numeric_cols[0]].rolling(window=window, min_periods=1).mean(),
+                            mode='lines',
+                            name='Moving Average',
+                            line=dict(dash='dash', color='#e74c3c')
+                        )
+                    )
+                    fig.update_layout(height=400, width=700, template=CHART_TEMPLATE)
+                    save_chart_to_pdf(fig, f"Time Series Analysis: {numeric_cols[0]} Over Time", pdf)
+            except Exception as e:
+                pass
+        
+        # ========== CHART 7: COMPARATIVE ANALYSIS BAR CHART ==========
+        if categorical_cols and numeric_cols:
+            try:
+                cat_col = chart_selections.get('compare_cat', categorical_cols[0])
+                metric_col = chart_selections.get('compare_metric', numeric_cols[0])
+                top_n = chart_selections.get('compare_top_n', 10)
+                
+                agg_data = display_df.groupby(cat_col)[metric_col].sum().sort_values(ascending=False).head(top_n)
+                
+                if len(agg_data) > 0:
+                    fig = px.bar(
+                        x=agg_data.values,
+                        y=agg_data.index,
+                        orientation='h',
+                        title=f"Comparative Analysis: Top {top_n} {cat_col} by {metric_col}",
+                        labels={'x': metric_col, 'y': cat_col},
+                        color=agg_data.values,
+                        color_continuous_scale='Viridis'
+                    )
+                    fig.update_layout(height=400, width=700, template=CHART_TEMPLATE, margin=dict(l=100))
+                    save_chart_to_pdf(fig, f"Comparative Analysis: Top {top_n} {cat_col}", pdf)
+            except Exception as e:
+                pass
+        
+        # ========== CHART 8: COMPARATIVE ANALYSIS PIE CHART ==========
+        if categorical_cols and numeric_cols:
+            try:
+                cat_col = chart_selections.get('compare_cat', categorical_cols[0])
+                metric_col = chart_selections.get('compare_metric', numeric_cols[0])
+                top_n = chart_selections.get('compare_top_n', 10)
+                
+                agg_data = display_df.groupby(cat_col)[metric_col].sum().sort_values(ascending=False).head(top_n)
+                
+                if len(agg_data) <= 10 and len(agg_data) > 0:
+                    fig = px.pie(
+                        values=agg_data.values,
+                        names=agg_data.index,
+                        title=f"Distribution of {metric_col} by {cat_col}",
+                        hole=0.3,
+                        color_discrete_sequence=px.colors.qualitative.Set3
+                    )
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    fig.update_layout(height=400, width=600, template=CHART_TEMPLATE)
+                    save_chart_to_pdf(fig, f"Distribution: {metric_col} by {cat_col}", pdf, "pie")
+            except Exception as e:
+                pass
+        
+        # ========== CHART 9: TARGET VS ACTUAL GAUGE ==========
+        target_cols = [c for c in numeric_cols if 'target' in c.lower() or 'goal' in c.lower() or 'budget' in c.lower()]
+        actual_cols = [c for c in numeric_cols if 'actual' in c.lower() or 'sales' in c.lower() or 'revenue' in c.lower()]
+        
+        if target_cols and actual_cols:
+            try:
+                total_target = display_df[target_cols[0]].sum()
+                total_actual = display_df[actual_cols[0]].sum()
+                achievement = (total_actual / total_target * 100) if total_target > 0 else 0
+                
+                fig = go.Figure(go.Indicator(
+                    mode="gauge+number+delta",
+                    value=achievement,
+                    title={'text': "Target Achievement %"},
+                    delta={'reference': 100},
+                    gauge={
+                        'axis': {'range': [None, 150]},
+                        'bar': {'color': "#27ae60"},
+                        'steps': [
+                            {'range': [0, 50], 'color': "#e74c3c"},
+                            {'range': [50, 80], 'color': "#f39c12"},
+                            {'range': [80, 100], 'color': "#f1c40f"},
+                            {'range': [100, 150], 'color': "#2ecc71"}
+                        ],
+                        'threshold': {'line': {'color': "#c0392b", 'width': 4}, 'thickness': 0.75, 'value': 100}
+                    }
+                ))
+                fig.update_layout(height=350, width=500, template=CHART_TEMPLATE)
+                save_chart_to_pdf(fig, f"Target vs Actual: {actual_cols[0]} vs {target_cols[0]}", pdf, "gauge")
+            except Exception as e:
+                pass
         
         # Generate PDF
         pdf_bytes = pdf.output(dest='S').encode('latin-1')
         
-        if charts_added == 0:
-            st.warning("No charts could be generated for this dashboard. Only KPIs are included.")
-        
-        st.success(f" Dashboard ready! Contains {len(kpis)} KPIs and {charts_added} charts")
+        st.success(f" Dashboard ready! KPIs and all charts captured")
         
         st.download_button(
             label=" Download Full Dashboard (PDF)",
@@ -467,7 +589,6 @@ def download_full_dashboard(df, sheet_name, file_name):
         st.error(f"Error generating dashboard: {str(e)}")
         st.code(traceback.format_exc())
         return False
-
 
 # ============================================
 # BOARD-LEVEL KPI FUNCTIONS
@@ -539,7 +660,7 @@ def display_board_kpis(df, sheet_name):
 
 
 def display_visualizations(df, sheet_name):
-    """Display quick visualizations"""
+    """Display quick visualizations and store selections for download"""
     
     if df.empty:
         st.info("No data available for visualizations")
@@ -553,13 +674,19 @@ def display_visualizations(df, sheet_name):
         st.info("No numeric columns available for visualizations")
         return
     
+    # Initialize chart selections
+    if 'dashboard_chart_selections' not in st.session_state:
+        st.session_state['dashboard_chart_selections'] = {}
+    
     if categorical_cols:
-        st.subheader("Bar Chart")
+        st.subheader(" Bar Chart")
         col1, col2 = st.columns(2)
         with col1:
-            x_axis = st.selectbox("X-Axis (Category)", categorical_cols, key="bar_x")
+            x_axis = st.selectbox("X-Axis (Category)", categorical_cols, key=f"bar_x_{sheet_name}")
+            st.session_state['dashboard_chart_selections']['bar_x'] = x_axis
         with col2:
-            y_axis = st.selectbox("Y-Axis (Value)", numeric_cols, key="bar_y")
+            y_axis = st.selectbox("Y-Axis (Value)", numeric_cols, key=f"bar_y_{sheet_name}")
+            st.session_state['dashboard_chart_selections']['bar_y'] = y_axis
         
         agg_data = df.groupby(x_axis)[y_axis].sum().reset_index().sort_values(y_axis, ascending=False)
         fig = px.bar(agg_data, x=x_axis, y=y_axis, title=f"{y_axis} by {x_axis}",
@@ -572,20 +699,19 @@ def display_visualizations(df, sheet_name):
         st.subheader(" Trend Chart")
         col1, col2 = st.columns(2)
         with col1:
-            date_col = st.selectbox("Date Column", date_cols, key="line_date")
+            date_col = st.selectbox("Date Column", date_cols, key=f"line_date_{sheet_name}")
             try:
                 df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
             except:
                 pass
         with col2:
-            value_col = st.selectbox("Value", numeric_cols, key="line_value")
+            value_col = st.selectbox("Value", numeric_cols, key=f"line_value_{sheet_name}")
         
         df_sorted = df.sort_values(date_col, ascending=False)
         fig = px.line(df_sorted, x=date_col, y=value_col, title=f"{value_col} Over Time", 
-                    markers=True, color_discrete_sequence=['#667eea'])
+                     markers=True, color_discrete_sequence=['#667eea'])
         fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
         st.plotly_chart(fig, use_container_width=True)
-
 
 def display_charts(df, sheet_name):
     """Display interactive charts"""
@@ -797,7 +923,7 @@ def display_time_series_analysis(df, sheet_name):
 
 
 def display_comparative_analysis(df, sheet_name):
-    """Display comparative analysis charts"""
+    """Display comparative analysis charts and store selections for download"""
     
     st.subheader(" Comparative Analysis")
     
@@ -809,12 +935,21 @@ def display_comparative_analysis(df, sheet_name):
         st.info("Need both numeric and categorical columns for comparative analysis")
         return
     
+    # Initialize chart selections in session state
+    if 'dashboard_chart_selections' not in st.session_state:
+        st.session_state['dashboard_chart_selections'] = {}
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        cat_col = st.selectbox("Select Category to Compare", categorical_cols, key="compare_cat")
-        metric_col = st.selectbox("Select Metric", numeric_cols, key="compare_metric")
-        top_n = st.slider("Show Top N Categories", 5, 20, 10)
+        cat_col = st.selectbox("Select Category to Compare", categorical_cols, key=f"compare_cat_{sheet_name}")
+        metric_col = st.selectbox("Select Metric", numeric_cols, key=f"compare_metric_{sheet_name}")
+        top_n = st.slider("Show Top N Categories", 5, 20, 10, key=f"compare_top_n_{sheet_name}")
+        
+        # Store selections for download
+        st.session_state['dashboard_chart_selections']['compare_cat'] = cat_col
+        st.session_state['dashboard_chart_selections']['compare_metric'] = metric_col
+        st.session_state['dashboard_chart_selections']['compare_top_n'] = top_n
         
         agg_data = df.groupby(cat_col)[metric_col].sum().sort_values(ascending=False).head(top_n)
         
@@ -827,11 +962,12 @@ def display_comparative_analysis(df, sheet_name):
             color=agg_data.values,
             color_continuous_scale='Viridis'
         )
-        fig.update_layout(height=CHART_HEIGHT + 100, template=CHART_TEMPLATE)
+        fig.update_layout(height=400, template=CHART_TEMPLATE)
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        if len(agg_data) <= 10:
+        agg_data = df.groupby(cat_col)[metric_col].sum().sort_values(ascending=False).head(top_n)
+        if len(agg_data) <= 10 and len(agg_data) > 0:
             fig = px.pie(
                 values=agg_data.values,
                 names=agg_data.index,
@@ -840,13 +976,12 @@ def display_comparative_analysis(df, sheet_name):
                 color_discrete_sequence=px.colors.qualitative.Set3
             )
             fig.update_traces(textposition='inside', textinfo='percent+label')
-            fig.update_layout(height=CHART_HEIGHT + 100, template=CHART_TEMPLATE)
+            fig.update_layout(height=400, template=CHART_TEMPLATE)
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.dataframe(agg_data.reset_index().rename(columns={cat_col: cat_col, metric_col: metric_col}), use_container_width=True)
     
     st.divider()
-
 
 def display_target_vs_actual(df, sheet_name):
     """Display target vs actual comparison if target columns exist"""
@@ -981,6 +1116,10 @@ def display_sheet_data_enhanced(file_info, selected_sheet):
         st.warning(f"No data found for sheet: {selected_sheet}")
         return
     
+    # Initialize chart selections in session state
+    if 'dashboard_chart_selections' not in st.session_state:
+        st.session_state['dashboard_chart_selections'] = {}
+    
     # Header with download button
     col1, col2 = st.columns([3, 1])
     
@@ -990,39 +1129,18 @@ def display_sheet_data_enhanced(file_info, selected_sheet):
     
     with col2:
         if st.button(" Download Full Dashboard", type="primary", use_container_width=True,
-                    help="Download complete dashboard with KPIs and charts as PDF"):
-            download_full_dashboard(df, selected_sheet, st.session_state.get('selected_file', 'Unknown'))
+                    help="Download complete dashboard with current view as PDF"):
+            # Get current filtered data
+            filtered_df = st.session_state.get('current_filtered_df', df)
+            download_full_dashboard(
+                df, 
+                selected_sheet, 
+                st.session_state.get('selected_file', 'Unknown'),
+                filtered_df=filtered_df,
+                chart_selections=st.session_state.get('dashboard_chart_selections', {})
+            )
     
-    # Board KPIs Section
-    display_board_kpis(df, selected_sheet)
-    
-    # Quick metrics row
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Records", f"{len(df):,}")
-    with col2:
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        st.metric("Numeric Columns", len(numeric_cols))
-    with col3:
-        st.metric("Total Columns", df.shape[1])
-    
-    st.divider()
-    
-    # Time Series Analysis (if date columns exist)
-    date_cols = [c for c in df.columns if any(kw in c.lower() for kw in DATE_COLUMN_KEYWORDS)]
-    if date_cols:
-        display_time_series_analysis(df, selected_sheet)
-    
-    # Target vs Actual (if target columns exist)
-    numeric_cols = df.select_dtypes(include=['number']).columns
-    target_cols = [c for c in numeric_cols if 'target' in c.lower() or 'goal' in c.lower()]
-    if target_cols:
-        display_target_vs_actual(df, selected_sheet)
-    
-    # Comparative Analysis
-    display_comparative_analysis(df, selected_sheet)
-    
-    # Filters
+    # ========== APPLY FILTERS ==========
     with st.expander(" Advanced Filters", expanded=False):
         filtered_df = df.copy()
         categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
@@ -1036,6 +1154,38 @@ def display_sheet_data_enhanced(file_info, selected_sheet):
                     selected = st.selectbox(f"Filter by {col}", unique_vals, key=f"filter_{col}_{selected_sheet}")
                     if selected != 'All':
                         filtered_df = filtered_df[filtered_df[col] == selected]
+        
+        # Store filtered dataframe for download
+        st.session_state['current_filtered_df'] = filtered_df
+    
+    # Board KPIs Section (using filtered data)
+    display_board_kpis(filtered_df, selected_sheet)
+    
+    # Quick metrics row (using filtered data)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Records", f"{len(filtered_df):,}")
+    with col2:
+        numeric_cols = filtered_df.select_dtypes(include=['number']).columns
+        st.metric("Numeric Columns", len(numeric_cols))
+    with col3:
+        st.metric("Total Columns", filtered_df.shape[1])
+    
+    st.divider()
+    
+    # Time Series Analysis (if date columns exist)
+    date_cols = [c for c in filtered_df.columns if any(kw in c.lower() for kw in DATE_COLUMN_KEYWORDS)]
+    if date_cols:
+        display_time_series_analysis(filtered_df, selected_sheet)
+    
+    # Target vs Actual (if target columns exist)
+    numeric_cols = filtered_df.select_dtypes(include=['number']).columns
+    target_cols = [c for c in numeric_cols if 'target' in c.lower() or 'goal' in c.lower()]
+    if target_cols:
+        display_target_vs_actual(filtered_df, selected_sheet)
+    
+    # Comparative Analysis
+    display_comparative_analysis(filtered_df, selected_sheet)
     
     # Tabs for visualizations
     tab1, tab2, tab3, tab4 = st.tabs([" Visualizations", " Charts", " Data Table", " Statistics"])
@@ -1048,6 +1198,14 @@ def display_sheet_data_enhanced(file_info, selected_sheet):
     
     with tab3:
         st.dataframe(filtered_df, use_container_width=True, height=400)
+        csv = filtered_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            " Download as CSV",
+            csv,
+            f"{selected_sheet}.csv",
+            "text/csv",
+            help="Download the currently filtered data as CSV"
+        )
     
     with tab4:
         display_statistics(filtered_df)
