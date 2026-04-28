@@ -89,7 +89,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 
     ```
     modify src/hash_passwords.py 
-    run py src/has_passwwords.py
+     py src/has_passwwords.py
 
     paste them into config.yaml file
     ```
@@ -97,9 +97,6 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 ### Folders Auto-Created
 
     ```
-    # clone the repository
-    git clone https://github.com/Abdi-nasir/SPS-SMART-EXCEL-PIPELINE.git
-    cd sps-excel-pipeline
 
     # You see this structure (NO data/reports folders)
     sps-excel-pipeline/
