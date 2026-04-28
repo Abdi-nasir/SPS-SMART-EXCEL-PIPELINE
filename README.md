@@ -80,6 +80,7 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     │   ├── raw/
     │   └── processed/
     ├── reports/
+    ├── logs/
     ├── src/
     │   └── app.py
     └── ...
