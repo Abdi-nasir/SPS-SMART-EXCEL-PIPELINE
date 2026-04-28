@@ -64,6 +64,13 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     py -m streamlit run src/app.py
     ```
 
+4. **Hash your own password**
+
+    ```
+    modify src/hash_passwords.py 
+    run py src/has_passwwords.py
+
+    paste them into config.yaml file
 ### Option 2: Run with Docker
 
 1. **Clone and run**
@@ -78,13 +85,6 @@ An intelligent Excel data processing pipeline that automatically handles multipl
     Open http://localhost:8501
     ```
 
-3. **Hash your own password**
-
-    ```
-    modify src/hash_passwords.py 
-    run py src/has_passwwords.py
-
-    paste them into config.yaml file
     ```
 
 
