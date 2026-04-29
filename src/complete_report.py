@@ -29,55 +29,66 @@ class CompleteReportGenerator:
                 return True
         return False
     
-    def _extract_kpis_from_sheet(self, df: pd.DataFrame) -> dict:
-        """Extract KPIs from high level metrics sheet"""
+    def _extract_kpis_from_sheet(self, df):
         result = {'categories': {}, 'all_metrics': []}
         
         if df.empty:
             return result
-        
+
         category_col = None
         metric_col = None
         value_col = None
-        
+        payment_vol = None
+        payment_val = None
+
+        # Detect columns dynamically
         for col in df.columns:
             col_lower = str(col).lower()
+
             if 'category' in col_lower:
                 category_col = col
-            elif 'metric' in col_lower:
+            elif 'metric' in col_lower or 'kpi' in col_lower or 'name' in col_lower:
                 metric_col = col
             elif 'value' in col_lower:
                 value_col = col
-        
-        if category_col is not None and metric_col is not None and value_col is not None:
-            for idx, row in df.iterrows():
-                category = str(row[category_col]).strip()
-                metric = str(row[metric_col]).strip()
-                value = str(row[value_col]).strip()
-                
-                if metric and metric.lower() not in ['metric', 'kpi', 'name', '']:
-                    formatted_value = value
-                    try:
-                        if value.replace(',', '').replace('.', '').replace('-', '').isdigit():
-                            num_val = float(value.replace(',', ''))
-                            if num_val.is_integer():
-                                formatted_value = f"{int(num_val):,}"
-                            else:
-                                formatted_value = f"{num_val:,.2f}"
-                    except:
-                        pass
-                    
-                    metric_data = {
-                        'name': metric,
-                        'value': formatted_value,
-                        'color': self._get_kpi_color(metric)
-                    }
-                    
-                    if category not in result['categories']:
-                        result['categories'][category] = []
-                    result['categories'][category].append(metric_data)
-                    result['all_metrics'].append(metric_data)
-        
+            elif 'volume' in col_lower:
+                payment_vol = col
+            elif 'value' in col_lower and 'payment' in col_lower:
+                payment_val = col
+
+        if not (metric_col and value_col):
+            return result
+
+        for _, row in df.iterrows():
+            category = str(row.get(category_col, 'General')).strip()
+            metric = str(row.get(metric_col, '')).strip()
+            value = str(row.get(value_col, '')).strip()
+
+            payment_volume = str(row.get(payment_vol, '')).strip() if payment_vol else None
+            payment_value = str(row.get(payment_val, '')).strip() if payment_val else None
+
+            if not metric or metric.lower() in ['metric', 'kpi', 'name']:
+                continue
+
+            # Format numeric values
+            def format_number(val):
+                try:
+                    num = float(str(val).replace(',', ''))
+                    return f"{int(num):,}" if num.is_integer() else f"{num:,.2f}"
+                except:
+                    return val
+
+            metric_data = {
+                'name': metric,
+                'value': format_number(value),
+                'payment_volume': format_number(payment_volume) if payment_volume else None,
+                'payment_value': format_number(payment_value) if payment_value else None,
+                'color': self._get_kpi_color(metric)
+            }
+
+            result['categories'].setdefault(category, []).append(metric_data)
+            result['all_metrics'].append(metric_data)
+
         return result
     
     def _get_kpi_color(self, kpi_name: str) -> tuple:
@@ -348,8 +359,7 @@ class CompleteReportGenerator:
                     if has_any_chart:
                         self._add_data_sheet_report(pdf, sheet, temp_files)
             
-            # Add footer to the last page
-            last_page = pdf.page_no()
+          
             pdf.set_y(250)
             pdf.set_font("Arial", "I", 8)
             pdf.set_text_color(150, 150, 150)
@@ -416,7 +426,7 @@ class CompleteReportGenerator:
             pdf.ln(4)
             
             categories = kpi_data.get('categories', {})
-            start_y = pdf.get_y()
+          
             
             for category, metrics in categories.items():
                 # Category header

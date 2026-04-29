@@ -112,14 +112,14 @@ KPI_COLORS = {
 
 # For value/amount columns
 VALUE_COLUMN_KEYWORDS = [
-    'value', 'amount', 'total', 'price', 
+    'value','VALUE', 'amount','AMOUNT', 'total', 'price', 'paymen_value', 'PAYMENT_VALUE',
     'revenue', 'fee', 'cost', 'sum', 
     'sales', 'transaction_value'
 ]
 
 # For volume/count columns
 VOLUME_COLUMN_KEYWORDS = [
-    'volume', 'count', 'qty', 'quantity', 
+    'volume','VOLUME', 'count', 'qty', 'quantity','payment_volume', 'PAYMENT_VOLUME',
     'number', 'total_count', 'transaction_count'
 ]
 

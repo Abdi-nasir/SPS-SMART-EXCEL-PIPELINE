@@ -97,7 +97,6 @@ An intelligent Excel data processing pipeline that automatically handles multipl
 ### Folders Auto-Created
 
     ```
-
     # You see this structure (NO data/reports folders)
     sps-excel-pipeline/
     ├── src/

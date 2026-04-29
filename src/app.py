@@ -255,7 +255,6 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
         pdf = FPDF(orientation=PDF_ORIENTATION, unit=PDF_UNIT, format=PDF_FORMAT)
         pdf.set_auto_page_break(auto=True, margin=PDF_MARGIN)
         
-        temp_files = []
         
         def clean_text(text):
             replacements = {
@@ -266,6 +265,7 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
             for old, new in replacements.items():
                 text = text.replace(old, new)
             return text.encode('ascii', errors='ignore').decode('ascii')
+        
         
         def save_chart_to_pdf(fig, title, pdf_obj, chart_type="standard"):
             temp_path = os.path.join(tempfile.gettempdir(), f"chart_{uuid.uuid4().hex}.png")
@@ -538,37 +538,37 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
             except Exception as e:
                 pass
         
-        # ========== CHART 9: TARGET VS ACTUAL GAUGE ==========
-        target_cols = [c for c in numeric_cols if 'target' in c.lower() or 'goal' in c.lower() or 'budget' in c.lower()]
-        actual_cols = [c for c in numeric_cols if 'actual' in c.lower() or 'sales' in c.lower() or 'revenue' in c.lower()]
+        # # ========== CHART 9: TARGET VS ACTUAL GAUGE ==========
+        # target_cols = [c for c in numeric_cols if 'target' in c.lower() or 'goal' in c.lower() or 'budget' in c.lower()]
+        # actual_cols = [c for c in numeric_cols if 'actual' in c.lower() or 'sales' in c.lower() or 'revenue' in c.lower()]
         
-        if target_cols and actual_cols:
-            try:
-                total_target = display_df[target_cols[0]].sum()
-                total_actual = display_df[actual_cols[0]].sum()
-                achievement = (total_actual / total_target * 100) if total_target > 0 else 0
+        # if target_cols and actual_cols:
+        #     try:
+        #         total_target = display_df[target_cols[0]].sum()
+        #         total_actual = display_df[actual_cols[0]].sum()
+        #         achievement = (total_actual / total_target * 100) if total_target > 0 else 0
                 
-                fig = go.Figure(go.Indicator(
-                    mode="gauge+number+delta",
-                    value=achievement,
-                    title={'text': "Target Achievement %"},
-                    delta={'reference': 100},
-                    gauge={
-                        'axis': {'range': [None, 150]},
-                        'bar': {'color': "#27ae60"},
-                        'steps': [
-                            {'range': [0, 50], 'color': "#e74c3c"},
-                            {'range': [50, 80], 'color': "#f39c12"},
-                            {'range': [80, 100], 'color': "#f1c40f"},
-                            {'range': [100, 150], 'color': "#2ecc71"}
-                        ],
-                        'threshold': {'line': {'color': "#c0392b", 'width': 4}, 'thickness': 0.75, 'value': 100}
-                    }
-                ))
-                fig.update_layout(height=350, width=500, template=CHART_TEMPLATE)
-                save_chart_to_pdf(fig, f"Target vs Actual: {actual_cols[0]} vs {target_cols[0]}", pdf, "gauge")
-            except Exception as e:
-                pass
+        #         fig = go.Figure(go.Indicator(
+        #             mode="gauge+number+delta",
+        #             value=achievement,
+        #             title={'text': "Target Achievement %"},
+        #             delta={'reference': 100},
+        #             gauge={
+        #                 'axis': {'range': [None, 150]},
+        #                 'bar': {'color': "#27ae60"},
+        #                 'steps': [
+        #                     {'range': [0, 50], 'color': "#e74c3c"},
+        #                     {'range': [50, 80], 'color': "#f39c12"},
+        #                     {'range': [80, 100], 'color': "#f1c40f"},
+        #                     {'range': [100, 150], 'color': "#2ecc71"}
+        #                 ],
+        #                 'threshold': {'line': {'color': "#c0392b", 'width': 4}, 'thickness': 0.75, 'value': 100}
+        #             }
+        #         ))
+        #         fig.update_layout(height=350, width=500, template=CHART_TEMPLATE)
+        #         save_chart_to_pdf(fig, f"Target vs Actual: {actual_cols[0]} vs {target_cols[0]}", pdf, "gauge")
+        #     except Exception as e:
+        #         pass
         
         # Generate PDF
         pdf_bytes = pdf.output(dest='S').encode('latin-1')
