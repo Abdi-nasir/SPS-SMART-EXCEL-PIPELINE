@@ -4,7 +4,7 @@ credentials:
     admin:
       email: admin@sps.com
       name: Administrator
-      password: $2b$12$4kk2YPqneh4aO1NoXq0Y6u7tpKFoYw/Hwl7ROZAc8NpNKekQqiNnG$
+      password: $2b$12$4kk2YPqneh4aO1NoXq0Y6u7tpKFoYw/Hwl7ROZAc8NpNKekQqiNnG
       role: admin
     manager:
       email: manager@sps.com
