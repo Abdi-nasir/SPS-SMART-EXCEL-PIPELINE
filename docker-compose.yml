@@ -2,7 +2,7 @@ name: sps-board-dashboard
 
 services:
   sps-dashboard:
-    image: tamhiid/sps-board-dashboard-sps-excel-dashboard:1.0.2
+    image: tamhiid/sps-board-dashboard-sps-excel-dashboard:1.0.3
     container_name: sps-excel-dashboard
     ports:
       - "8501:8501"
