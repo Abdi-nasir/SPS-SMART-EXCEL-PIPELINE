@@ -34,8 +34,8 @@ from config import (
     PROCESSED_DIR,
     REPORTS_DIR,
     PAGE_TITLE,
-    PAGE_ICON,
     PAGE_LAYOUT,
+    PAGE_ICON,
     SIDEBAR_STATE,
     PDF_ORIENTATION,
     PDF_FORMAT,
@@ -43,8 +43,6 @@ from config import (
     PDF_MARGIN,
     MAX_UPLOAD_SIZE_MB,
     ALLOWED_EXTENSIONS,
-    LOGO_PATH,
-    FALLBACK_LOGO_URL,
     HEADER_COLOR,
     CHART_HEIGHT,
     CHART_WIDTH,
@@ -57,6 +55,14 @@ from config import (
     PENDING_KEYWORDS,
     HIGH_LEVEL_METRICS_PATTERNS,
     KPI_COLORS,
+    LOGO_PATH,
+    FALLBACK_LOGO_URL,
+    TRANSACTION_RULES,
+    RULE_CATEGORIES,
+    get_rule_name,
+    get_all_rule_codes,
+    get_all_rule_names,
+    get_rules_by_category,
     ensure_directories
 )
 
@@ -68,8 +74,8 @@ ensure_directories()
 # ============================================
 st.set_page_config(
     page_title=PAGE_TITLE,
-    page_icon=PAGE_ICON,
     layout=PAGE_LAYOUT,
+    page_icon=PAGE_ICON,
     initial_sidebar_state=SIDEBAR_STATE
 )
 
@@ -105,55 +111,69 @@ logger.info("Application starting...")
 # AUTHENTICATION SETUP
 # ============================================
 
-# Load configuration
-config_path = Path(__file__).parent.parent / 'config.yaml'
-with open(config_path, 'r', encoding='utf-8') as file:
-    config = yaml.load(file, Loader=SafeLoader)
-
-# Create authenticator object
-authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days'],
-    config.get('pre-authorized', [])
-)
-
-# Create login widget
-try:
-    name, authentication_status, username = authenticator.login(
-        location='main',
-        fields={
-            'Form name': 'Login',
-            'Username': 'Username',
-            'Password': 'Password',
-            'Login': 'Login'
-        }
+def setup_authentication():
+    """Setup authentication and return authenticator and status"""
+    # Load configuration
+    config_path = Path(__file__).parent.parent / 'config.yaml'
+    
+    if not config_path.exists():
+        st.error(f"Config file not found: {config_path}")
+        return None, None, None, None
+    
+    with open(config_path, 'r', encoding='utf-8') as file:
+        config = yaml.load(file, Loader=SafeLoader)
+    
+    # Create authenticator object
+    authenticator = stauth.Authenticate(
+        config['credentials'],
+        config['cookie']['name'],
+        config['cookie']['key'],
+        config['cookie']['expiry_days'],
+        config.get('pre-authorized', [])
     )
-except Exception as e:
-    st.error(f"Login form error: {e}")
-    authentication_status = None
-    name = None
-    username = None
+    
+    # Create login widget
+    try:
+        name, authentication_status, username = authenticator.login(
+            location='main',
+            fields={
+                'Form name': 'Login',
+                'Username': 'Username',
+                'Password': 'Password',
+                'Login': 'Login'
+            }
+        )
+    except Exception as e:
+        st.error(f"Login form error: {e}")
+        authentication_status = None
+        name = None
+        username = None
+    
+    return authenticator, name, authentication_status, username
+
 
 # ============================================
 # SESSION STATE MANAGEMENT
 # ============================================
 
-# Initialize session state
-if 'authentication_status' not in st.session_state:
-    st.session_state['authentication_status'] = authentication_status
-if 'name' not in st.session_state:
-    st.session_state['name'] = name
-if 'username' not in st.session_state:
-    st.session_state['username'] = username
-
-# Update session state from login attempt
-if authentication_status is not None:
-    st.session_state['authentication_status'] = authentication_status
-    st.session_state['name'] = name
-    st.session_state['username'] = username
-
+def init_session_state():
+    """Initialize session state variables"""
+    if 'authentication_status' not in st.session_state:
+        st.session_state['authentication_status'] = None
+    if 'name' not in st.session_state:
+        st.session_state['name'] = None
+    if 'username' not in st.session_state:
+        st.session_state['username'] = None
+    if 'dashboard_chart_selections' not in st.session_state:
+        st.session_state['dashboard_chart_selections'] = {}
+    if 'selected_file' not in st.session_state:
+        st.session_state['selected_file'] = None
+    if 'selected_sheet' not in st.session_state:
+        st.session_state['selected_sheet'] = None
+    if 'current_filtered_df' not in st.session_state:
+        st.session_state['current_filtered_df'] = None
+    if 'selected_rules' not in st.session_state:
+        st.session_state['selected_rules'] = []
 
 
 # ============================================
@@ -171,34 +191,57 @@ def detect_value_column(df: pd.DataFrame) -> str:
     return numeric_cols[0] if len(numeric_cols) > 0 else None
 
 
-def detect_status_metrics(df: pd.DataFrame) -> tuple:
-    """Detect success/failure counts using config keywords"""
-    success_count = 0
-    failed_count = 0
+def parse_rules_column(rules_value):
+    """
+    Parse the Rules column which can contain formats like:
+    - [1002]
+    - 1027,1018,1028
+    - 1027,1028
+    - 1027
+    Returns a list of rule codes as strings
+    """
+    if pd.isna(rules_value):
+        return []
     
-    status_col = None
-    for col in df.columns:
-        col_lower = col.lower()
-        for keyword in STATUS_COLUMN_KEYWORDS:
-            if keyword in col_lower:
-                status_col = col
-                break
-        if status_col:
-            break
+    rules_str = str(rules_value)
     
-    if status_col:
-        for status, count in df[status_col].value_counts().items():
-            status_str = str(status).lower()
-            if any(kw in status_str for kw in SUCCESS_KEYWORDS):
-                success_count += count
-            elif any(kw in status_str for kw in FAILURE_KEYWORDS):
-                failed_count += count
-            elif any(kw in status_str for kw in PENDING_KEYWORDS):
-                pass
-            else:
-                success_count += count
+    # Remove brackets if present
+    rules_str = rules_str.strip('[]')
     
-    return success_count, failed_count
+    # Split by comma
+    rules_list = [r.strip() for r in rules_str.split(',') if r.strip()]
+    
+    return [str(r) for r in rules_list]
+
+
+def check_rule_in_transaction(transaction_rules, rule_code):
+    """Check if a rule code exists in transaction's rules"""
+    if pd.isna(transaction_rules):
+        return False
+    rules_list = parse_rules_column(transaction_rules)
+    return str(rule_code) in rules_list
+
+
+def filter_by_rules(df, selected_rule_codes):
+    """Filter dataframe by selected rule codes"""
+    if not selected_rule_codes:
+        return df
+    
+    # Create mask for rows that contain ANY of the selected rule codes
+    mask = df['Rules'].apply(
+        lambda x: any(str(rule) in parse_rules_column(x) for rule in selected_rule_codes)
+    )
+    
+    return df[mask]
+
+
+def get_all_unique_rules_from_data(df):
+    """Extract all unique rule codes from the Rules column in the data"""
+    all_rules = set()
+    for rules_val in df['Rules'].dropna():
+        rules_list = parse_rules_column(rules_val)
+        all_rules.update(rules_list)
+    return sorted(list(all_rules), key=lambda x: int(x) if x.isdigit() else x)
 
 
 def is_high_level_metrics_sheet(sheet_name: str) -> bool:
@@ -227,8 +270,217 @@ def get_kpi_color(kpi_name: str) -> tuple:
 
 
 # ============================================
-# FULL DASHBOARD DOWNLOAD FUNCTION
+# ADVANCED FILTERS WITH RULES FROM CONFIG
 # ============================================
+
+def display_advanced_filters(df, sheet_name):
+    """Display advanced filters including rule-based filtering"""
+    
+    with st.expander(" Advanced Filters", expanded=False):
+        # Start with the original dataframe
+        filtered_df = df.copy()
+        
+        categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+        categorical_cols = [c for c in categorical_cols if not c.startswith('_') and c != 'Rules']
+        
+        if categorical_cols:
+            st.markdown("**Filter by Category**")
+            cols = st.columns(min(2, len(categorical_cols)))
+            for i, col in enumerate(categorical_cols[:2]):
+                with cols[i]:
+                    unique_vals = ['All'] + sorted(df[col].dropna().unique().tolist())
+                    selected_val = st.selectbox(f"{col}", unique_vals, key=f"filter_{col}_{sheet_name}")
+                    if selected_val != 'All':
+                        filtered_df = filtered_df[filtered_df[col] == selected_val]
+        
+        # ========== RULES FILTER - SIMPLIFIED ==========
+        if 'Rules' in df.columns:
+            st.markdown("---")
+            st.markdown("**Filter by Rules**")
+            
+            # Get unique rules from data by splitting the Rules column
+            all_rules = set()
+            for val in df['Rules'].dropna():
+                # Clean the value
+                val_str = str(val).replace('[', '').replace(']', '')
+                # Split by comma and add each rule
+                for r in val_str.split(','):
+                    r = r.strip()
+                    if r:
+                        all_rules.add(r)
+            
+            unique_rules = sorted(list(all_rules), key=lambda x: int(x) if x.isdigit() else x)
+            
+            if unique_rules:
+                # st.info(f" Found {len(unique_rules)} unique rules in data: {', '.join(unique_rules)}")
+                
+                # Create dropdown options
+                rule_options = []
+                for rule_code in unique_rules:
+                    rule_name = TRANSACTION_RULES.get(rule_code, rule_code)
+                    if rule_name != rule_code:
+                        rule_options.append(f"{rule_code} - {rule_name}")
+                    else:
+                        rule_options.append(rule_code)
+                
+                # Rule selector
+                selected_rules = st.multiselect(
+                    "Select rules to filter transactions",
+                    options=rule_options,
+                    default=[],
+                    key=f"rules_filter_{sheet_name}"
+                )
+                
+                if selected_rules:
+                    # Extract just the rule codes
+                    selected_codes = []
+                    for opt in selected_rules:
+                        if ' - ' in opt:
+                            selected_codes.append(opt.split(' - ')[0])
+                        else:
+                            selected_codes.append(opt)
+                    
+                    # Apply filter
+                    original_count = len(filtered_df)
+                    
+                    # SIMPLE FILTER: Check if the Rules column contains ANY of the selected codes
+                    # Convert Rules column to string and check if contains the code
+                    mask = filtered_df['Rules'].astype(str).apply(
+                        lambda x: any(code in x for code in selected_codes)
+                    )
+                    
+                    filtered_df = filtered_df[mask]
+                    
+                    st.success(f" {len(filtered_df)} transactions match selected rules (from {original_count} total)")
+                    
+                    # Show which rules matched
+                    if len(filtered_df) > 0:
+                        matched_summary = []
+                        for code in selected_codes:
+                            count = filtered_df['Rules'].astype(str).str.contains(code).sum()
+                            if count > 0:
+                                matched_summary.append(f"{code}: {count}")
+                        if matched_summary:
+                            st.caption(f"Matches: {', '.join(matched_summary)}")
+                else:
+                    # No rules selected, show all
+                    st.caption(f"Showing all {len(filtered_df)} transactions")
+            else:
+                st.warning("No numeric rule codes found")
+                
+        # ========== SUMMARY ==========
+        # if len(filtered_df) != len(df):
+        #     st.markdown("---")
+            # if st.button(" Clear All Filters", key=f"clear_all_{sheet_name}"):
+            #     st.rerun()
+        
+        return filtered_df   
+    
+    
+    
+# ============================================
+# BOARD-LEVEL KPI FUNCTIONS
+# ============================================
+
+def display_board_kpis(df, sheet_name):
+    """Display professional KPI cards for board dashboard"""
+    
+    st.subheader("Key Performance Indicators")
+    
+    numeric_cols = df.select_dtypes(include=['number']).columns
+    
+    if len(numeric_cols) == 0:
+        st.warning("No numeric data available for KPIs")
+        return
+    
+    primary_metric = detect_value_column(df) or numeric_cols[0]
+    
+    total_value = df[primary_metric].sum()
+    avg_value = df[primary_metric].mean()
+    max_value = df[primary_metric].max()
+    min_value = df[primary_metric].min()
+    
+    date_cols = [c for c in df.columns if any(kw in c.lower() for kw in DATE_COLUMN_KEYWORDS)]
+    trend_pct = 0
+    if date_cols:
+        try:
+            df_temp = df.copy()
+            df_temp['_temp_date'] = pd.to_datetime(df_temp[date_cols[0]], errors='coerce')
+            df_temp['_month'] = df_temp['_temp_date'].dt.to_period('M')
+            monthly_trend = df_temp.groupby('_month')[primary_metric].sum()
+            if len(monthly_trend) >= 2:
+                trend_pct = ((monthly_trend.iloc[-1] - monthly_trend.iloc[-2]) / monthly_trend.iloc[-2]) * 100
+        except:
+            pass
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            label=f"Total {primary_metric.replace('_', ' ').title()}",
+            value=f"{total_value:,.0f}",
+            delta=f"{trend_pct:+.1f}% vs previous" if trend_pct != 0 else None,
+            delta_color="normal"
+        )
+    
+    with col2:
+        st.metric(
+            label=f"Average {primary_metric.replace('_', ' ').title()}",
+            value=f"{avg_value:,.0f}",
+            help="Average value per transaction/record"
+        )
+    
+    with col3:
+        st.metric(
+            label=f"Maximum {primary_metric.replace('_', ' ').title()}",
+            value=f"{max_value:,.0f}",
+            help="Highest value recorded"
+        )
+    
+    with col4:
+        st.metric(
+            label=f"Minimum {primary_metric.replace('_', ' ').title()}",
+            value=f"{min_value:,.0f}",
+            help="Lowest value recorded"
+        )
+    
+    st.divider()
+
+
+def display_visualizations(df, sheet_name):
+    """Display quick visualizations and store selections for download"""
+    
+    if df.empty:
+        st.info("No data available for visualizations")
+        return
+    
+    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+    categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+    categorical_cols = [c for c in categorical_cols if not c.startswith('_')]
+    
+    if not numeric_cols:
+        st.info("No numeric columns available for visualizations")
+        return
+    
+    if categorical_cols:
+        st.subheader("Bar Chart")
+        col1, col2 = st.columns(2)
+        with col1:
+            x_axis = st.selectbox("X-Axis (Category)", categorical_cols, key=f"bar_x_{sheet_name}")
+            st.session_state['dashboard_chart_selections']['bar_x'] = x_axis
+        with col2:
+            y_axis = st.selectbox("Y-Axis (Value)", numeric_cols, key=f"bar_y_{sheet_name}")
+            st.session_state['dashboard_chart_selections']['bar_y'] = y_axis
+        
+        agg_data = df.groupby(x_axis)[y_axis].sum().reset_index().sort_values(y_axis, ascending=False)
+        fig = px.bar(agg_data, x=x_axis, y=y_axis, title=f"{y_axis} by {x_axis}",
+                    color=y_axis, color_continuous_scale='Viridis')
+        fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
+        st.plotly_chart(fig, use_container_width=True)
+
+# =======================================
+# DASHBOARD DOWNLOAD FUNCTION   
+# =======================================
 
 def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_selections=None):
     """
@@ -270,8 +522,13 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
         def save_chart_to_pdf(fig, title, pdf_obj, chart_type="standard"):
             temp_path = os.path.join(tempfile.gettempdir(), f"chart_{uuid.uuid4().hex}.png")
             try:
+                # Get dimensions from the figure, or use defaults
+                width = fig.layout.width if fig.layout.width else 700
+                height = fig.layout.height if fig.layout.height else 400
+                
                 if chart_type == "pie":
-                    fig.write_image(temp_path, scale=1.5, width=600, height=400)
+                    # Use the figure's dimensions
+                    fig.write_image(temp_path, scale=1.5, width=width, height=height)
                     pdf_obj.add_page()
                     pdf_obj.set_font("Arial", "B", 14)
                     pdf_obj.set_fill_color(HEADER_COLOR[0], HEADER_COLOR[1], HEADER_COLOR[2])
@@ -279,9 +536,11 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
                     pdf_obj.cell(0, 10, clean_text(title), ln=True, fill=True)
                     pdf_obj.set_text_color(0, 0, 0)
                     pdf_obj.ln(8)
-                    pdf_obj.image(temp_path, x=55, y=35, w=190)
+                    # Center the image based on its width
+                    x_pos = (297 - width/4.5) / 2
+                    pdf_obj.image(temp_path, x=x_pos, y=35, w=width/4.5)
                 elif chart_type == "gauge":
-                    fig.write_image(temp_path, scale=1.5, width=500, height=350)
+                    fig.write_image(temp_path, scale=1.5, width=width, height=height)
                     pdf_obj.add_page()
                     pdf_obj.set_font("Arial", "B", 14)
                     pdf_obj.set_fill_color(HEADER_COLOR[0], HEADER_COLOR[1], HEADER_COLOR[2])
@@ -291,7 +550,7 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
                     pdf_obj.ln(8)
                     pdf_obj.image(temp_path, x=75, y=35, w=150)
                 else:
-                    fig.write_image(temp_path, scale=1.5, width=700, height=400)
+                    fig.write_image(temp_path, scale=1.5, width=width, height=height)
                     pdf_obj.add_page()
                     pdf_obj.set_font("Arial", "B", 14)
                     pdf_obj.set_fill_color(HEADER_COLOR[0], HEADER_COLOR[1], HEADER_COLOR[2])
@@ -307,7 +566,6 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
             finally:
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
-        
         # ========== TITLE PAGE ==========
         pdf.add_page()
         pdf.set_fill_color(HEADER_COLOR[0], HEADER_COLOR[1], HEADER_COLOR[2])
@@ -429,7 +687,8 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
                 pie_data = display_df.groupby(pie_col)[value_col].sum().reset_index().sort_values(value_col, ascending=False).head(10)
                 fig = px.pie(pie_data, values=value_col, names=pie_col, title=f"Pie Chart: Distribution of {value_col}",
                             hole=0.3, color_discrete_sequence=px.colors.qualitative.Set3)
-                fig.update_layout(height=400, width=600, template=CHART_TEMPLATE)
+                fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(size=14, family='Arial', color='black'),insidetextfont=dict(size=14, weight='bold'),  title_font=dict(size=16, weight='bold') )
+                fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE, autosize=False, margin=dict(t=80, b=50, l=50, r=50))
                 save_chart_to_pdf(fig, f"Pie Chart: Distribution of {value_col}", pdf, "pie")
             except Exception as e:
                 pass
@@ -511,6 +770,7 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
                         color_continuous_scale='Viridis'
                     )
                     fig.update_layout(height=400, width=700, template=CHART_TEMPLATE, margin=dict(l=100))
+                    
                     save_chart_to_pdf(fig, f"Comparative Analysis: Top {top_n} {cat_col}", pdf)
             except Exception as e:
                 pass
@@ -532,8 +792,9 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
                         hole=0.3,
                         color_discrete_sequence=px.colors.qualitative.Set3
                     )
-                    fig.update_traces(textposition='inside', textinfo='percent+label')
-                    fig.update_layout(height=400, width=600, template=CHART_TEMPLATE)
+                    fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(size=14, family='Arial', color='black'),insidetextfont=dict(size=14, weight='bold'),  title_font=dict(size=16, weight='bold') )
+                    fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE, autosize=False, margin=dict(t=80, b=50, l=50, r=50))
+                   # st.plotly_chart(fig, use_container_width=True)
                     save_chart_to_pdf(fig, f"Distribution: {metric_col} by {cat_col}", pdf, "pie")
             except Exception as e:
                 pass
@@ -590,129 +851,6 @@ def download_full_dashboard(df, sheet_name, file_name, filtered_df=None, chart_s
         st.code(traceback.format_exc())
         return False
 
-# ============================================
-# BOARD-LEVEL KPI FUNCTIONS
-# ============================================
-
-def display_board_kpis(df, sheet_name):
-    """Display professional KPI cards for board dashboard"""
-    
-    st.subheader(" Key Performance Indicators")
-    
-    numeric_cols = df.select_dtypes(include=['number']).columns
-    
-    if len(numeric_cols) == 0:
-        st.warning("No numeric data available for KPIs")
-        return
-    
-    primary_metric = detect_value_column(df) or numeric_cols[0]
-    
-    total_value = df[primary_metric].sum()
-    avg_value = df[primary_metric].mean()
-    max_value = df[primary_metric].max()
-    min_value = df[primary_metric].min()
-    
-    date_cols = [c for c in df.columns if any(kw in c.lower() for kw in DATE_COLUMN_KEYWORDS)]
-    trend_pct = 0
-    if date_cols:
-        try:
-            df_temp = df.copy()
-            df_temp['_temp_date'] = pd.to_datetime(df_temp[date_cols[0]], errors='coerce')
-            df_temp['_month'] = df_temp['_temp_date'].dt.to_period('M')
-            monthly_trend = df_temp.groupby('_month')[primary_metric].sum()
-            if len(monthly_trend) >= 2:
-                trend_pct = ((monthly_trend.iloc[-1] - monthly_trend.iloc[-2]) / monthly_trend.iloc[-2]) * 100
-        except:
-            pass
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            label=f" Total {primary_metric.replace('_', ' ').title()}",
-            value=f"{total_value:,.0f}",
-            delta=f"{trend_pct:+.1f}% vs previous" if trend_pct != 0 else None,
-            delta_color="normal"
-        )
-    
-    with col2:
-        st.metric(
-            label=f" Average {primary_metric.replace('_', ' ').title()}",
-            value=f"{avg_value:,.0f}",
-            help="Average value per transaction/record"
-        )
-    
-    with col3:
-        st.metric(
-            label=f" Maximum {primary_metric.replace('_', ' ').title()}",
-            value=f"{max_value:,.0f}",
-            help="Highest value recorded"
-        )
-    
-    with col4:
-        st.metric(
-            label=f" Minimum {primary_metric.replace('_', ' ').title()}",
-            value=f"{min_value:,.0f}",
-            help="Lowest value recorded"
-        )
-    
-    st.divider()
-
-
-def display_visualizations(df, sheet_name):
-    """Display quick visualizations and store selections for download"""
-    
-    if df.empty:
-        st.info("No data available for visualizations")
-        return
-    
-    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-    categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
-    categorical_cols = [c for c in categorical_cols if not c.startswith('_')]
-    
-    if not numeric_cols:
-        st.info("No numeric columns available for visualizations")
-        return
-    
-    # Initialize chart selections
-    if 'dashboard_chart_selections' not in st.session_state:
-        st.session_state['dashboard_chart_selections'] = {}
-    
-    if categorical_cols:
-        st.subheader(" Bar Chart")
-        col1, col2 = st.columns(2)
-        with col1:
-            x_axis = st.selectbox("X-Axis (Category)", categorical_cols, key=f"bar_x_{sheet_name}")
-            st.session_state['dashboard_chart_selections']['bar_x'] = x_axis
-        with col2:
-            y_axis = st.selectbox("Y-Axis (Value)", numeric_cols, key=f"bar_y_{sheet_name}")
-            st.session_state['dashboard_chart_selections']['bar_y'] = y_axis
-        
-        agg_data = df.groupby(x_axis)[y_axis].sum().reset_index().sort_values(y_axis, ascending=False)
-        fig = px.bar(agg_data, x=x_axis, y=y_axis, title=f"{y_axis} by {x_axis}",
-                    color=y_axis, color_continuous_scale='Viridis')
-        fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    date_cols = [c for c in df.columns if any(kw in c.lower() for kw in DATE_COLUMN_KEYWORDS)]
-    if date_cols and numeric_cols:
-        st.subheader(" Trend Chart")
-        col1, col2 = st.columns(2)
-        with col1:
-            date_col = st.selectbox("Date Column", date_cols, key=f"line_date_{sheet_name}")
-            try:
-                df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-            except:
-                pass
-        with col2:
-            value_col = st.selectbox("Value", numeric_cols, key=f"line_value_{sheet_name}")
-        
-        df_sorted = df.sort_values(date_col, ascending=False)
-        fig = px.line(df_sorted, x=date_col, y=value_col, title=f"{value_col} Over Time", 
-                     markers=True, color_discrete_sequence=['#667eea'])
-        fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
-        st.plotly_chart(fig, use_container_width=True)
-
 def display_charts(df, sheet_name):
     """Display interactive charts"""
     
@@ -726,26 +864,32 @@ def display_charts(df, sheet_name):
     
     chart_type = st.selectbox(
         "Select Chart Type",
-        [" Pie Chart", " Scatter Plot", " Histogram"],
+        ["Pie Chart", "Scatter Plot", "Histogram"],
         key="chart_type_select"
     )
     
-    if chart_type == " Pie Chart" and categorical_cols:
+    if chart_type == "Pie Chart" and categorical_cols:
         pie_col = st.selectbox("Category", categorical_cols, key="pie_col")
         value_col = st.selectbox("Value Column", numeric_cols, key="pie_value")
+        st.session_state['dashboard_chart_selections']['pie_col'] = pie_col
+        st.session_state['dashboard_chart_selections']['pie_value'] = value_col
+        
         pie_data = df.groupby(pie_col)[value_col].sum().reset_index().sort_values(value_col, ascending=False).head(12)
-        pie_data.columns = [pie_col, value_col]
         fig = px.pie(pie_data, values=value_col, names=pie_col, title=f"Distribution of {value_col} by {pie_col}",
                     color_discrete_sequence=px.colors.qualitative.Set3)
-        fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
+        fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(size=14, family='Arial', color='black'),insidetextfont=dict(size=14, weight='bold'),  title_font=dict(size=16, weight='bold') )
+        fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE, autosize=False, margin=dict(t=80, b=50, l=50, r=50))
+        
         st.plotly_chart(fig, use_container_width=True)
         
-    elif chart_type == " Scatter Plot" and len(numeric_cols) >= 2:
+    elif chart_type == "Scatter Plot" and len(numeric_cols) >= 2:
         col1, col2 = st.columns(2)
         with col1:
             x_col = st.selectbox("X-Axis", numeric_cols, key="scatter_x")
+            st.session_state['dashboard_chart_selections']['scatter_x'] = x_col
         with col2:
             y_col = st.selectbox("Y-Axis", numeric_cols, key="scatter_y")
+            st.session_state['dashboard_chart_selections']['scatter_y'] = y_col
         
         color_col = None
         if categorical_cols:
@@ -760,24 +904,16 @@ def display_charts(df, sheet_name):
         fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
         st.plotly_chart(fig, use_container_width=True)
         
-    elif chart_type == " Histogram" and numeric_cols:
+    elif chart_type == "Histogram" and numeric_cols:
         hist_col = st.selectbox("Column", numeric_cols, key="hist_col")
-        bins = st.slider("Number of Bins", 5, 50, 20)
+        bins = st.slider("Number of Bins", 5, 50, 20, key="hist_bins")
+        st.session_state['dashboard_chart_selections']['hist_col'] = hist_col
+        st.session_state['dashboard_chart_selections']['hist_bins'] = bins
+        
         fig = px.histogram(df, x=hist_col, nbins=bins, title=f"Distribution of {hist_col}",
                         color_discrete_sequence=['#667eea'])
         fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
         st.plotly_chart(fig, use_container_width=True)
-        
-    # elif chart_type == " Box Plot" and numeric_cols and categorical_cols:
-    #     col1, col2 = st.columns(2)
-    #     with col1:
-    #         y_col = st.selectbox("Value", numeric_cols, key="box_y")
-    #     with col2:
-    #         x_col = st.selectbox("Group By", categorical_cols, key="box_x")
-    #     fig = px.box(df, x=x_col, y=y_col, title=f"Distribution of {y_col} by {x_col}",
-    #                 color_discrete_sequence=['#3498db'])
-    #     fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE)
-    #     st.plotly_chart(fig, use_container_width=True)
     else:
         st.info(f"Need more columns for {chart_type}. Try a different chart type.")
 
@@ -789,7 +925,7 @@ def display_statistics(df):
         st.info("No data available for statistics")
         return
     
-    st.subheader(" Summary Statistics")
+    st.subheader("Summary Statistics")
     
     numeric_cols = df.select_dtypes(include=['number']).columns
     if len(numeric_cols) > 0:
@@ -798,7 +934,7 @@ def display_statistics(df):
     else:
         st.info("No numeric columns for statistics")
     
-    st.subheader(" Missing Values")
+    st.subheader("Missing Values")
     
     missing_data = []
     for col in df.columns:
@@ -811,9 +947,9 @@ def display_statistics(df):
         missing_df = pd.DataFrame(missing_data)
         st.dataframe(missing_df, use_container_width=True)
     else:
-        st.success(" No missing values found!")
+        st.success("No missing values found!")
     
-    st.subheader(" Column Information")
+    st.subheader("Column Information")
     
     col_data = []
     for col in df.columns:
@@ -843,7 +979,7 @@ def display_time_series_analysis(df, sheet_name):
     if not numeric_cols:
         return
     
-    st.subheader(" Trend Analysis")
+    st.subheader("Trend Analysis")
     
     col1, col2 = st.columns(2)
     
@@ -888,17 +1024,6 @@ def display_time_series_analysis(df, sheet_name):
         color_discrete_sequence=['#667eea']
     )
     
-    window = min(3, len(trend_data))
-    fig.add_trace(
-        go.Scatter(
-            x=trend_data['period_str'],
-            y=trend_data[metric_col].rolling(window=window, min_periods=1).mean(),
-            mode='lines',
-            name='Moving Average',
-            line=dict(dash='dash', color='#e74c3c')
-        )
-    )
-    
     fig.update_layout(height=CHART_HEIGHT + 150, xaxis_title="Time Period", yaxis_title=metric_col, template=CHART_TEMPLATE)
     st.plotly_chart(fig, use_container_width=True)
     
@@ -925,7 +1050,7 @@ def display_time_series_analysis(df, sheet_name):
 def display_comparative_analysis(df, sheet_name):
     """Display comparative analysis charts and store selections for download"""
     
-    st.subheader(" Comparative Analysis")
+    st.subheader("Comparative Analysis")
     
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
@@ -935,10 +1060,6 @@ def display_comparative_analysis(df, sheet_name):
         st.info("Need both numeric and categorical columns for comparative analysis")
         return
     
-    # Initialize chart selections in session state
-    if 'dashboard_chart_selections' not in st.session_state:
-        st.session_state['dashboard_chart_selections'] = {}
-    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -946,40 +1067,48 @@ def display_comparative_analysis(df, sheet_name):
         metric_col = st.selectbox("Select Metric", numeric_cols, key=f"compare_metric_{sheet_name}")
         top_n = st.slider("Show Top N Categories", 5, 20, 10, key=f"compare_top_n_{sheet_name}")
         
-        # Store selections for download
         st.session_state['dashboard_chart_selections']['compare_cat'] = cat_col
         st.session_state['dashboard_chart_selections']['compare_metric'] = metric_col
         st.session_state['dashboard_chart_selections']['compare_top_n'] = top_n
         
-        agg_data = df.groupby(cat_col)[metric_col].sum().sort_values(ascending=False).head(top_n)
+        # Group and aggregate properly
+        agg_data = df.groupby(cat_col)[metric_col].sum().reset_index()
+        agg_data = agg_data.sort_values(metric_col, ascending=False).head(top_n)
         
+        # Create horizontal bar chart
         fig = px.bar(
-            x=agg_data.values,
-            y=agg_data.index,
+            agg_data,
+            x=metric_col,
+            y=cat_col,
             orientation='h',
             title=f"Top {top_n} {cat_col} by {metric_col}",
-            labels={'x': metric_col, 'y': cat_col},
-            color=agg_data.values,
+            labels={metric_col: metric_col, cat_col: cat_col},
+            color=metric_col,
             color_continuous_scale='Viridis'
         )
         fig.update_layout(height=400, template=CHART_TEMPLATE)
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        agg_data = df.groupby(cat_col)[metric_col].sum().sort_values(ascending=False).head(top_n)
+        # Group and aggregate for pie chart
+        agg_data = df.groupby(cat_col)[metric_col].sum().reset_index()
+        agg_data = agg_data.sort_values(metric_col, ascending=False).head(top_n)
+        
         if len(agg_data) <= 10 and len(agg_data) > 0:
             fig = px.pie(
-                values=agg_data.values,
-                names=agg_data.index,
+                agg_data,
+                values=metric_col,
+                names=cat_col,
                 title=f"Distribution of {metric_col} by {cat_col}",
                 hole=0.3,
                 color_discrete_sequence=px.colors.qualitative.Set3
             )
             fig.update_traces(textposition='inside', textinfo='percent+label')
-            fig.update_layout(height=400, template=CHART_TEMPLATE)
+            fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(size=14, family='Arial', color='black'),insidetextfont=dict(size=14, weight='bold'),  title_font=dict(size=16, weight='bold') )
+            fig.update_layout(height=CHART_HEIGHT, width=CHART_WIDTH, template=CHART_TEMPLATE, autosize=False, margin=dict(t=80, b=50, l=50, r=50))
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.dataframe(agg_data.reset_index().rename(columns={cat_col: cat_col, metric_col: metric_col}), use_container_width=True)
+            st.dataframe(agg_data, use_container_width=True)
     
     st.divider()
 
@@ -994,7 +1123,7 @@ def display_target_vs_actual(df, sheet_name):
     if not target_cols or not actual_cols:
         return
     
-    st.subheader(" Target vs Actual Performance")
+    st.subheader("Target vs Actual Performance")
     
     target_col = target_cols[0]
     actual_col = actual_cols[0]
@@ -1047,14 +1176,15 @@ def display_target_vs_actual(df, sheet_name):
 def display_file_and_sheet_selector(file_structure):
     """Display file and sheet selector in sidebar"""
     
-    st.sidebar.markdown("###  Reports")
+    st.sidebar.markdown("### Reports")
     
-    if st.sidebar.button(" Generate Complete Transaction Report", use_container_width=True,
+    if st.sidebar.button("Generate Complete Transaction Report", use_container_width=True,
                         help="Generates a comprehensive report with all transaction metrics from ALL sheets"):
-        generate_complete_transaction_report()
+        st.text("Coming soon...")
+        # generate_complete_transaction_report()
     
     st.sidebar.divider()
-    st.sidebar.markdown("###  Select File")
+    st.sidebar.markdown("### Select File")
     
     file_names = list(file_structure.keys())
     
@@ -1073,7 +1203,7 @@ def display_file_and_sheet_selector(file_structure):
     file_info = file_structure[selected_file]
     sheets = file_info['sheets']
     
-    st.sidebar.markdown("###  Select Sheet")
+    st.sidebar.markdown("### Select Sheet")
     
     current_sheet = st.session_state.get('selected_sheet', sheets[0]) if sheets else None
     
@@ -1088,17 +1218,22 @@ def display_file_and_sheet_selector(file_structure):
     
     st.session_state['selected_sheet'] = selected_sheet
     
+    # Reset rule selection when sheet changes
+    if 'last_selected_sheet' in st.session_state and st.session_state['last_selected_sheet'] != selected_sheet:
+        st.session_state['selected_rules'] = []
+    st.session_state['last_selected_sheet'] = selected_sheet
+    
     st.sidebar.markdown("---")
-    st.sidebar.markdown("###  File Info")
+    st.sidebar.markdown("### File Info")
     st.sidebar.markdown(f"**Type:** {file_info['type'].replace('_', ' ').title()}")
     st.sidebar.markdown(f"**Sheets:** {len(sheets)}")
     
-    with st.sidebar.expander(" All Sheets in this File"):
+    with st.sidebar.expander("All Sheets in this File"):
         for sheet in sheets:
             if sheet == selected_sheet:
-                st.markdown(f" **{sheet}** (current)")
+                st.markdown(f"**{sheet}** (current)")
             else:
-                st.markdown(f" {sheet}")
+                st.markdown(f"{sheet}")
     
     return selected_file, selected_sheet, file_info
 
@@ -1116,53 +1251,23 @@ def display_sheet_data_enhanced(file_info, selected_sheet):
         st.warning(f"No data found for sheet: {selected_sheet}")
         return
     
-    # Initialize chart selections in session state
-    if 'dashboard_chart_selections' not in st.session_state:
-        st.session_state['dashboard_chart_selections'] = {}
+    # Header
+    st.header(f" {selected_sheet}")
+    st.caption(f"From file: {st.session_state.get('selected_file', 'Unknown')}")
     
-    # Header with download button
-    col1, col2 = st.columns([3, 1])
+  
     
-    with col1:
-        st.header(f" {selected_sheet}")
-        st.caption(f"From file: {st.session_state.get('selected_file', 'Unknown')}")
+    # ========== APPLY ADVANCED FILTERS ==========
+    filtered_df = display_advanced_filters(df, selected_sheet)
     
-    with col2:
-        if st.button(" Download Full Dashboard", type="primary", use_container_width=True,
-                    help="Download complete dashboard with current view as PDF"):
-            # Get current filtered data
-            filtered_df = st.session_state.get('current_filtered_df', df)
-            download_full_dashboard(
-                df, 
-                selected_sheet, 
-                st.session_state.get('selected_file', 'Unknown'),
-                filtered_df=filtered_df,
-                chart_selections=st.session_state.get('dashboard_chart_selections', {})
-            )
+    # Store filtered dataframe
+    st.session_state['current_filtered_df'] = filtered_df
     
-    # ========== APPLY FILTERS ==========
-    with st.expander(" Advanced Filters", expanded=False):
-        filtered_df = df.copy()
-        categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
-        categorical_cols = [c for c in categorical_cols if not c.startswith('_')]
-        
-        if categorical_cols:
-            cols = st.columns(min(3, len(categorical_cols)))
-            for i, col in enumerate(categorical_cols[:3]):
-                with cols[i]:
-                    unique_vals = ['All'] + sorted(df[col].dropna().unique().tolist())
-                    selected = st.selectbox(f"Filter by {col}", unique_vals, key=f"filter_{col}_{selected_sheet}")
-                    if selected != 'All':
-                        filtered_df = filtered_df[filtered_df[col] == selected]
-        
-        # Store filtered dataframe for download
-        st.session_state['current_filtered_df'] = filtered_df
-    
-    # Board KPIs Section (using filtered data)
+    # Board KPIs Section
     display_board_kpis(filtered_df, selected_sheet)
     
-    # Quick metrics row (using filtered data)
-    col1, col2, col3 = st.columns(3)
+    # Quick metrics row
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Records", f"{len(filtered_df):,}")
     with col2:
@@ -1170,15 +1275,19 @@ def display_sheet_data_enhanced(file_info, selected_sheet):
         st.metric("Numeric Columns", len(numeric_cols))
     with col3:
         st.metric("Total Columns", filtered_df.shape[1])
+    with col4:
+        if 'Rules' in filtered_df.columns:
+            unique_rules = get_all_unique_rules_from_data(filtered_df)
+            st.metric("Unique Rules", len(unique_rules))
     
     st.divider()
     
-    # Time Series Analysis (if date columns exist)
+    # Time Series Analysis
     date_cols = [c for c in filtered_df.columns if any(kw in c.lower() for kw in DATE_COLUMN_KEYWORDS)]
-    if date_cols:
-        display_time_series_analysis(filtered_df, selected_sheet)
+    # if date_cols:
+    #     display_time_series_analysis(filtered_df, selected_sheet)
     
-    # Target vs Actual (if target columns exist)
+    # Target vs Actual
     numeric_cols = filtered_df.select_dtypes(include=['number']).columns
     target_cols = [c for c in numeric_cols if 'target' in c.lower() or 'goal' in c.lower()]
     if target_cols:
@@ -1188,7 +1297,7 @@ def display_sheet_data_enhanced(file_info, selected_sheet):
     display_comparative_analysis(filtered_df, selected_sheet)
     
     # Tabs for visualizations
-    tab1, tab2, tab3, tab4 = st.tabs([" Visualizations", " Charts", " Data Table", " Statistics"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Visualizations", "Charts", "Data Table", "Statistics"])
     
     with tab1:
         display_visualizations(filtered_df, selected_sheet)
@@ -1200,7 +1309,7 @@ def display_sheet_data_enhanced(file_info, selected_sheet):
         st.dataframe(filtered_df, use_container_width=True, height=400)
         csv = filtered_df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            " Download as CSV",
+            "Download as CSV",
             csv,
             f"{selected_sheet}.csv",
             "text/csv",
@@ -1213,7 +1322,7 @@ def display_sheet_data_enhanced(file_info, selected_sheet):
 
 def upload_excel_files():
     """Handle file uploads"""
-    st.subheader(" Upload Excel Files")
+    st.subheader("Upload Excel Files")
     
     uploaded_files = st.file_uploader(
         "Choose Excel files",
@@ -1223,25 +1332,25 @@ def upload_excel_files():
     )
     
     if uploaded_files:
-        st.info(f" {len(uploaded_files)} file(s) selected")
+        st.info(f"{len(uploaded_files)} file(s) selected")
         for file in uploaded_files:
             st.write(f"   - {file.name}")
         
         col1, col2 = st.columns(2)
         with col1:
-            if st.button(" Upload & Process", type="primary", use_container_width=True):
+            if st.button("Upload & Process", type="primary", use_container_width=True):
                 for uploaded_file in uploaded_files:
                     file_path = RAW_DIR / uploaded_file.name
                     with open(file_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
-                    st.success(f" Uploaded: {uploaded_file.name}")
+                    st.success(f"Uploaded: {uploaded_file.name}")
                 
                 run_pipeline()
                 time.sleep(2)
                 st.rerun()
         
         with col2:
-            if st.button(" Run Pipeline Only", use_container_width=True):
+            if st.button("Run Pipeline Only", use_container_width=True):
                 run_pipeline()
                 time.sleep(2)
                 st.rerun()
@@ -1249,14 +1358,14 @@ def upload_excel_files():
 
 def fetch_external_data():
     """Fetch data from external system"""
-    st.subheader(" Fetch External Data")
+    st.subheader("Fetch External Data")
     
     with st.expander("Configure External Data Source"):
         source_url = st.text_input("API Endpoint URL", placeholder="https://api.example.com/data")
         auth_token = st.text_input("Authentication Token (optional)", type="password")
         parameters_json = st.text_area("Parameters (JSON)", value="{}", height=100)
         
-        if st.button(" Fetch and Process", type="primary"):
+        if st.button("Fetch and Process", type="primary"):
             if source_url:
                 try:
                     params = json.loads(parameters_json) if parameters_json else {}
@@ -1280,27 +1389,27 @@ def fetch_external_data():
                     file_path = RAW_DIR / filename
                     df.to_excel(file_path, index=False)
                     
-                    st.success(f" Fetched {len(df)} rows from external source")
+                    st.success(f"Fetched {len(df)} rows from external source")
                     run_pipeline()
                     time.sleep(2)
                     st.rerun()
                     
                 except Exception as e:
-                    st.error(f" Error: {str(e)}")
+                    st.error(f"Error: {str(e)}")
             else:
                 st.warning("Please enter an API endpoint URL")
 
 
 def run_pipeline():
     """Run the Excel processing pipeline"""
-    with st.spinner(" Processing Excel files..."):
+    with st.spinner("Processing Excel files..."):
         try:
             orchestrator = ExcelOrchestrator(RAW_DIR, PROCESSED_DIR)
             results = orchestrator.process_all()
-            st.success(" Pipeline completed successfully!")
+            st.success("Pipeline completed successfully!")
             return results
         except Exception as e:
-            st.error(f" Pipeline error: {str(e)}")
+            st.error(f"Pipeline error: {str(e)}")
             return None
 
 
@@ -1379,7 +1488,7 @@ def get_file_sheet_structure():
 def generate_complete_transaction_report():
     """Generate a complete report for the currently SELECTED file only"""
     try:
-        with st.spinner(f" Generating complete report for '{st.session_state.get('selected_file', 'Unknown')}'..."):
+        with st.spinner(f"Generating complete report for '{st.session_state.get('selected_file', 'Unknown')}'..."):
             file_structure = get_file_sheet_structure()
             
             if not file_structure:
@@ -1400,10 +1509,10 @@ def generate_complete_transaction_report():
             
             total_sheets = len(file_structure[selected_file]['sheets'])
             
-            st.success(f" Report generated for '{selected_file}'! Contains {total_sheets} sheet(s)")
+            st.success(f"Report generated for '{selected_file}'! Contains {total_sheets} sheet(s)")
             
             st.download_button(
-                label=" Download Complete Report (PDF)",
+                label="Download Complete Report (PDF)",
                 data=pdf_bytes,
                 file_name=Path(report_path).name,
                 mime="application/pdf",
@@ -1415,36 +1524,8 @@ def generate_complete_transaction_report():
         st.code(traceback.format_exc())
 
 
-# ============================================
-# MAIN APPLICATION (Protected by Authentication)
-# ============================================
-
-# Show login form if not authenticated
-if st.session_state['authentication_status'] is None or st.session_state['authentication_status'] is False:
-    # Already showing login form from authenticator.login()
-    if st.session_state['authentication_status'] is False:
-        st.error(' Username or password is incorrect')
-    elif st.session_state['authentication_status'] is None:
-        st.info(' Please enter your username and password to continue')
-    
-    # Stop execution here - don't show dashboard
-    st.stop()
-
-# If authenticated, show dashboard
-if st.session_state['authentication_status']:
-    
-    # Add logout button to sidebar
-    with st.sidebar:
-        authenticator.logout(' Logout', 'sidebar')
-        
-        # Display user info
-        st.success(f" Logged in as: {st.session_state.get('name', 'User')}")
-        st.caption(f"Username: {st.session_state.get('username', '')}")
-    
-    # ========== MAIN DASHBOARD CONTENT ==========
-    st.title(PAGE_TITLE)
-    st.markdown("*Enterprise-grade data visualization and analytics platform*")
-    
+def render_sidebar():
+    """Render sidebar content"""
     with st.sidebar:
         try:
             if LOGO_PATH.exists():
@@ -1460,44 +1541,102 @@ if st.session_state['authentication_status']:
         
         summary_path = PROCESSED_DIR / 'dashboard_summary.csv'
         if summary_path.exists():
-            st.success(" Pipeline Ready")
+            st.success("Pipeline Ready")
             last_updated = datetime.fromtimestamp(summary_path.stat().st_mtime)
             st.caption(f"Last updated: {last_updated.strftime('%Y-%m-%d %H:%M')}")
         else:
-            st.warning(" No data processed")
+            st.warning("No data processed")
         st.divider()
+
+
+# ============================================
+# MAIN APPLICATION FUNCTION
+# ============================================
+
+def main():
+    """Main application entry point"""
     
+    # Initialize session state
+    init_session_state()
+    
+    # Add logout button to sidebar
+    with st.sidebar:
+        if st.session_state.get('authenticator'):
+            st.session_state['authenticator'].logout('Logout', 'sidebar')
+        
+        # Display user info
+        st.success(f"Logged in as: {st.session_state.get('name', 'User')}")
+        st.caption(f"Username: {st.session_state.get('username', '')}")
+    
+    # Render sidebar
+    render_sidebar()
+    
+    # Main title
+    st.title(PAGE_TITLE)
+    st.markdown("*Enterprise-grade data visualization and analytics platform*")
+    
+    # Get file structure
     file_structure = get_file_sheet_structure()
     
     if not file_structure:
-        st.warning(" No processed data found! Please upload Excel files.")
-        tab1, tab2 = st.tabs([" Upload Files", " External Data"])
+        st.warning("No processed data found! Please upload Excel files.")
+        tab1, tab2 = st.tabs(["Upload Files", "External Data"])
         with tab1:
             upload_excel_files()
         with tab2:
-            fetch_external_data()
+            st.text("Coming soon: Connect to external data sources and APIs to fetch data directly into the platform for analysis.")
     else:
         with st.sidebar:
             selected_file, selected_sheet, file_info = display_file_and_sheet_selector(file_structure)
             st.divider()
             
-            if st.button(" Refresh Data", use_container_width=True):
+            if st.button("Refresh Data", use_container_width=True):
                 run_pipeline()
                 time.sleep(2)
                 st.rerun()
             
             st.divider()
             
-            page = st.radio("Navigation", [" Dashboard", " Upload Files", " External Data"], index=0)
+            page = st.radio("Navigation", ["Dashboard", "Upload Files", "External Data"], index=0)
         
-        if page == " Dashboard":
+        if page == "Dashboard":
             if selected_file and selected_sheet:
                 try:
                     display_sheet_data_enhanced(file_info, selected_sheet)
                 except Exception as e:
                     st.error(f"Error displaying sheet data: {str(e)}")
                     st.code(traceback.format_exc())
-        elif page == " Upload Files":
+        elif page == "Upload Files":
             upload_excel_files()
-        elif page == " External Data":
-            fetch_external_data()
+        elif page == "External Data":
+             st.header("Coming soon: Connect to external data sources and APIs to fetch data directly into the platform for analysis.")
+            # fetch_external_data()
+
+
+# ============================================
+# APPLICATION ENTRY POINT
+# ============================================
+
+if __name__ == "__main__":
+    # Setup authentication
+    authenticator, name, authentication_status, username = setup_authentication()
+    
+    # Update session state
+    st.session_state['authentication_status'] = authentication_status
+    st.session_state['name'] = name
+    st.session_state['username'] = username
+    st.session_state['authenticator'] = authenticator
+    
+    # Show login form if not authenticated
+    if authentication_status is None or authentication_status is False:
+        if authentication_status is False:
+            st.error('Username or password is incorrect')
+        elif authentication_status is None:
+            st.info('Please enter your username and password to continue')
+        
+        # Stop execution here - don't show dashboard
+        st.stop()
+    
+    # If authenticated, run main application
+    if authentication_status:
+        main()

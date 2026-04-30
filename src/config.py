@@ -79,8 +79,8 @@ PAGE_LAYOUT = "wide"
 SIDEBAR_STATE = "expanded"
 
 # Chart settings
-CHART_HEIGHT = 400
-CHART_WIDTH = 700
+CHART_HEIGHT = 600
+CHART_WIDTH = 1000
 CHART_TEMPLATE = 'plotly_white'
 
 # PDF Report settings
@@ -170,6 +170,81 @@ LOGO_PATH = BASE_DIR / "images" / "sps_logo.png"
 FALLBACK_LOGO_URL = "https://img.icons8.com/fluency/96/data-configuration.png"
 
 # ============================================
+# TRANSACTION RULES CONFIGURATION
+# ============================================
+
+# Predefined rules for transaction filtering
+TRANSACTION_RULES = {
+    # Rule Code: Rule Name
+    '1009': '3DS_01',
+    '1010': '3DS_02_01',
+    '1011': '3DS_02_02',
+    '1012': '3DS_03',
+    '1013': '3DS_04_01',
+    '1014': '3DS_04_02',
+    '1015': 'Limit exceeded control',
+    '1016': 'Limit control blocked and transfer',
+    '1017': 'Count & amount long interval',
+    '1018': 'Max TXN amount',
+    '1019': 'Suspicious Account List',
+    '1020': 'Count & amount progressive time',
+    '1021': 'Demo1',
+    '1022': 'Transactions, amount, and time',
+    '1023': 'Demo 3',
+    '1024': 'Demo 2',
+    '1025': 'Count & amount short interval',
+    '1026': 'Limit control of 80%',
+    '1027': 'Transaction amount 10K (Sender)',
+    '1028': 'Transaction amount 10K (Receiver)',
+    '1029': 'SPS Blocked Senders',
+    '1030': 'SPS Blocked Receivers',
+    '1031': 'CBS Blocked Receivers',
+    '1032': 'CBS Blocked Senders',
+    '1033': 'OFAC Blocked Senders',
+    '1034': 'OFAC Blocked Receivers',
+}
+
+# Rule categories for better organization
+RULE_CATEGORIES = {
+    ' Risk Level': [
+        ('1019', 'Suspicious Account List'),
+        ('1029', 'SPS Blocked Senders'),
+        ('1030', 'SPS Blocked Receivers'),
+        ('1031', 'CBS Blocked Receivers'),
+        ('1032', 'CBS Blocked Senders'),
+        ('1033', 'OFAC Blocked Senders'),
+        ('1034', 'OFAC Blocked Receivers'),
+    ],
+    ' Amount Limits': [
+        ('1015', 'Limit exceeded control'),
+        ('1016', 'Limit control blocked and transfer'),
+        ('1018', 'Max TXN amount'),
+        ('1026', 'Limit control of 80%'),
+        ('1027', 'Transaction amount 10K (Sender)'),
+        ('1028', 'Transaction amount 10K (Receiver)'),
+    ],
+    ' 3DS Verification': [
+        ('1009', '3DS_01'),
+        ('1010', '3DS_02_01'),
+        ('1011', '3DS_02_02'),
+        ('1012', '3DS_03'),
+        ('1013', '3DS_04_01'),
+        ('1014', '3DS_04_02'),
+    ],
+    ' Time & Count': [
+        ('1017', 'Count & amount long interval'),
+        ('1020', 'Count & amount progressive time'),
+        ('1025', 'Count & amount short interval'),
+        ('1022', 'Transactions, amount, and time'),
+    ],
+    ' Demo': [
+        ('1021', 'Demo1'),
+        ('1023', 'Demo 3'),
+        ('1024', 'Demo 2'),
+    ],
+}
+
+# ============================================
 # UTILITY FUNCTIONS
 # ============================================
 
@@ -201,8 +276,39 @@ def get_config_summary() -> dict:
         'allowed_extensions': list(ALLOWED_EXTENSIONS),
         'page_title': PAGE_TITLE,
         'chart_template': CHART_TEMPLATE,
-        'pdf_format': PDF_FORMAT
+        'pdf_format': PDF_FORMAT,
+        'total_rules': len(TRANSACTION_RULES)
     }
+
+
+def get_rule_name(rule_code: str) -> str:
+    """Get rule name from rule code"""
+    return TRANSACTION_RULES.get(str(rule_code), rule_code)
+
+
+def get_rule_code(rule_name: str) -> str:
+    """Get rule code from rule name"""
+    for code, name in TRANSACTION_RULES.items():
+        if name == rule_name:
+            return code
+    return rule_name
+
+
+def get_all_rule_names() -> list:
+    """Get all rule names sorted"""
+    return sorted(TRANSACTION_RULES.values())
+
+
+def get_all_rule_codes() -> list:
+    """Get all rule codes sorted"""
+    return sorted(TRANSACTION_RULES.keys())
+
+
+def get_rules_by_category(category: str = None) -> dict:
+    """Get rules grouped by category"""
+    if category:
+        return dict(RULE_CATEGORIES.get(category, []))
+    return RULE_CATEGORIES
 
 
 # # ============================================
